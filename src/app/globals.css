@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Custom Properties — Dark-First Design System ─────────────────── */
+
+:root {
+  /* Dark theme (default) */
+  --background: #0a0a0f;
+  --foreground: #f4f4f5;
+  --accent: #6366f1;
+  --accent-foreground: #ffffff;
+  --muted: #18181b;
+  --muted-foreground: #a1a1aa;
+  --card: #111118;
+  --card-foreground: #f4f4f5;
+  --border: #27272a;
+  --input: #27272a;
+  --ring: #6366f1;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --background: #fafafa;
+    --foreground: #09090b;
+    --accent: #4f46e5;
+    --accent-foreground: #ffffff;
+    --muted: #f4f4f5;
+    --muted-foreground: #71717a;
+    --card: #ffffff;
+    --card-foreground: #09090b;
+    --border: #e4e4e7;
+    --input: #e4e4e7;
+    --ring: #4f46e5;
+  }
+}
+
+/* ─── Base Styles ─────────────────────────────────────────────────────── */
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Selection ───────────────────────────────────────────────────────── */
+
+::selection {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+/* ─── Scrollbar ───────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ─── Focus States ─────────────────────────────────────────────────────── */
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ─── Tabular Numbers ─────────────────────────────────────────────────── */
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Change Badge Colors ──────────────────────────────────────────────── */
+
+.badge-new {
+  @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+}
+.badge-exited {
+  @apply bg-red-500/20 text-red-400 border border-red-500/30;
+}
+.badge-increased {
+  @apply bg-emerald-500/20 text-emerald-400 border border-emerald-500/30;
+}
+.badge-decreased {
+  @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+}
+.badge-unchanged {
+  @apply bg-zinc-500/20 text-zinc-400 border border-zinc-500/30;
+}

@@ -1,0 +1,104 @@
+// SEC EDGAR 13F Institutional Holdings — Data Model
+//
+// Architecture:
+//   Institution (CIK) → Filing (quarter) → Holding (CUSIP + shares + value)
+//   CUSIP is the primary join key for cross-institution comparison.
+//   Company name is stored for display only — never for matching.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Institution ─────────────────────────────────────────────────────────────
+//
+// An institutional investment manager who files 13F reports.
+// Identified by SEC CIK (Central Index Key) — a 10-digit integer.
+// Name is denormalized for display; never used for matching.
+
+model Institution {
+  cik       String   @id // "0001067983" — zero-padded 10-digit SEC identifier
+  name      String                  // "BERKSHIRE HATHAWAY INC"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  filings   Filing[]
+
+  @@index([name])
+}
+
+// ─── Filing ───────────────────────────────────────────────────────────────────
+//
+// A single 13F filing for a given institution in a given quarter.
+// Filed within 45 days of quarter end (Q1 Jan-Mar → due May 15, etc.)
+//
+// The filingUrl points to the SEC EDGAR raw filing — used to fetch holdings
+// if we don't have them cached locally.
+
+model Filing {
+  id              String   @id @default(cuid())
+  institutionCik  String
+  quarter         String   // "2025-Q4" — ISO quarter format
+  filedAt         DateTime // actual SEC filing timestamp
+  filingUrl       String   // https://www.sec.gov/Archives/edgar/data/<CIK>/<accession>/13f-doc.xml
+  isAmended       Boolean  @default(false) // amendment to prior quarter
+  holdingsFetchedAt DateTime? // null = not yet fetched
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  institution     Institution @relation(fields: [institutionCik], references: [cik])
+  holdings        Holding[]
+
+  @@unique([institutionCik, quarter]) // one canonical filing per institution per quarter
+  @@index([institutionCik])
+  @@index([quarter])
+}
+
+// ─── Holding ──────────────────────────────────────────────────────────────────
+//
+// A single security position reported in a 13F filing.
+// CUSIP is the authoritative identifier — not company name.
+//
+// Shares are raw (not split-adjusted). The splitFactor is applied to derive
+// split-adjusted shares: adjustedShares = rawShares / cumulativeSplitFactor.
+//
+// priorQuarterShares is the split-adjusted share count from the prior filing
+// (or null if this is the institution's first filing in our DB).
+
+model Holding {
+  id                   String   @id @default(cuid())
+  filingId             String
+  cusip                String   // "037833100" = Apple — 9 chars, zero-padded
+  companyName          String   // "APPLE INC" — for display only
+  // ── Raw values from 13F ─────────────────────────────────────────────────
+  rawShares            Int      // integer share count from filing
+  rawValue             Decimal  @db.Decimal(18, 2) // reported market value in USD
+  // ── Split adjustment ────────────────────────────────────────────────────
+  cumulativeSplitFactor Decimal @default(1.0) // product of all splits since first filing
+  adjustedShares        Int      // rawShares / cumulativeSplitFactor
+  // ── Change tracking ─────────────────────────────────────────────────────
+  priorAdjustedShares   Int?     // from prior quarter filing (split-adjusted), null if N/A
+  // ── Cached change metadata ──────────────────────────────────────────────
+  changeType            ChangeType @default(UNCHANGED)
+  changePercent         Decimal?  @db.Decimal(8, 2) // % change from prior quarter
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  filing                Filing   @relation(fields: [filingId], references: [id])
+
+  @@unique([filingId, cusip]) // one position per security per filing
+  @@index([cusip])
+  @@index([filingId])
+}
+
+enum ChangeType {
+  NEW
+  EXITED
+  INCREASED
+  DECREASED
+  UNCHANGED
+}

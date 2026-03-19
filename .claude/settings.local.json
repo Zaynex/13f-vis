@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git clone:*)",
+      "Bash(mkdir -p ~/.claude/skills/gstack)",
+      "Bash(rm -rf /Users/vincent/.claude/skills/gstack/.git)"
+    ]
+  }
+}
