@@ -1,0 +1,24 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+## [0.2.0] - 2026-03-20
+
+### Added
+- **Multi-quarter comparison mode** — New `?quarters=` param on `/api/tracker/[cik]` returns all holdings across N quarters with per-quarter shares and value. UI: Two-way / Multi-quarter toggle on tracker page with checkbox quarter selector and TrendTable showing all positions across quarters with trend arrows.
+- **Quarter-over-quarter holdings tracker** — New `/tracker/[cik]` page and `/api/tracker/[cik]` endpoint supporting comparison of any two quarters (consecutive or non-consecutive). Shows holdings grouped by NEW/EXITED/INCREASED/DECREASED/UNCHANGED with summary stats.
+
+### Changed
+- **Track Changes CTA** — Added prominent CTA directing users to the tracker for each institution.
+
+### Fixed
+- Updated to Next.js 15 async params for API routes (resolves type errors).
+- Resolved type errors in parsers and schema.
+- Fixed inconsistent quarter button ordering in multi-select mode (buttons and heading now both use reverse chronological order).
+
+## [0.1.1] - 2026-03-19
+
+### Added
+- Initial SEC 13F visualizer with EDGAR parsing, Prisma/SQLite database, and institution search.
