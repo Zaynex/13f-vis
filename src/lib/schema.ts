@@ -72,6 +72,12 @@ export const ComparisonSchema = z.object({
   quarter: z.string().regex(/^\d{4}-Q[1-4]$/).optional(),
 })
 
+export const TrackerQuerySchema = z.object({
+  cik: z.string().regex(/^\d{10}$/, 'CIK must be 10 digits zero-padded'),
+  from: z.string().regex(/^\d{4}-Q[1-4]$/, 'Quarter must be YYYY-QN format'),
+  to: z.string().regex(/^\d{4}-Q[1-4]$/, 'Quarter must be YYYY-QN format'),
+})
+
 // ─── Change Badge Calculation ─────────────────────────────────────────────────
 //
 // Given current and prior quarter adjusted share counts, classify the change.
@@ -86,8 +92,9 @@ export function calculateChangeBadge(
   if (currentShares !== null && priorShares === null) return 'NEW'
   if (currentShares === null && priorShares !== null) return 'EXITED'
   if (currentShares === priorShares) return 'UNCHANGED'
+  if (currentShares === null || priorShares === null) return 'UNCHANGED'
 
-  const pct = ((currentShares - priorShares!) / priorShares!) * 100
+  const pct = ((currentShares - priorShares) / priorShares) * 100
   if (pct > 1) return 'INCREASED'
   if (pct < -1) return 'DECREASED'
   return 'UNCHANGED'

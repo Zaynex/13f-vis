@@ -5,6 +5,12 @@
 
 ## Completed
 
+### Non-Consecutive Quarter Comparison + Multi-Quarter Trend View
+- **What:** New `/tracker/[cik]` page and `/api/tracker/[cik]` endpoint — compare any two quarters side-by-side with NEW/EXITED/INCREASED/DECREASED/UNCHANGED groupings. Also added Multi-Quarter mode with `?quarters=` param for N-quarter trend table view.
+- **Why:** Core feature request: lets users see 6-month or annual change in one view
+- **Where:** `src/app/tracker/[cik]/page.tsx`, `src/app/api/tracker/[cik]/route.ts`
+- **Completed:** 2026-03-20
+
 ### EDGAR Parsing Documentation
 - **What:** Document 13F filing format quirks, EDGAR API rate limits, how to add new institutions
 - **Why:** Institutional knowledge that will be lost if not written down

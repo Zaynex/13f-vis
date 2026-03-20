@@ -15,13 +15,14 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { HoldingsTable } from '@/components/HoldingsTable'
+import type { ChangeType } from '@prisma/client'
 
 interface Holding {
   cusip: string
   companyName: string
   adjustedShares: number
   rawValue: number
-  changeType: string
+  changeType: ChangeType | 'UNCHANGED'
   changePercent: number | null
 }
 
@@ -136,7 +137,7 @@ export default function InstitutionPage() {
       .then((r) => r.json())
       .then((d) => {
         if (d.filings) {
-          setQuarters([...new Set(d.filings.map((f: { quarter: string }) => f.quarter))].sort().reverse())
+          setQuarters([...new Set(d.filings.map((f: { quarter: string }) => f.quarter))].sort().reverse() as string[])
         }
       })
       .catch(() => {})
@@ -173,9 +174,15 @@ export default function InstitutionPage() {
             </div>
             <Link
               href={`/compare?ciks=${cik}`}
-              className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent)]/90"
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-sm font-medium hover:bg-[var(--muted)]"
             >
               Compare
+            </Link>
+            <Link
+              href={`/tracker/${cik}`}
+              className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent)]/90"
+            >
+              Track Changes
             </Link>
           </div>
         </div>
