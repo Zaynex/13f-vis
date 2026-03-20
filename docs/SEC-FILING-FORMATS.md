@@ -174,9 +174,12 @@ https://www.sec.gov/Archives/edgar/data/<CIK>/<accession-normalized>/<accession-
 **Holdings filename patterns (in order of preference):**
 1. `50240.xml` — the standard SEC document number for 13F info tables
 2. `infotable.xml` (non-XSL version) — prefer the raw XML over XSL-transformed
-3. Any other `.xml` excluding `primary_doc` and `-index` files
+3. `file.XML` — used by some filers (e.g., Susquehanna International). Appears at both root level (raw XML) and inside `xslForm13F_X02/` (XSL-transformed HTML)
+4. Any other `.xml` excluding `primary_doc` and `-index` files
 
 **Important:** `xslForm13F_X02/infotable.xml` is HTML (XSL-transformed), not XML. The non-XSL `infotable.xml` at the same level is raw XML.
+
+**Case sensitivity:** SEC URLs may use `.XML` (uppercase). The scraper regex must use the `/i` flag to match both `.xml` and `.XML`.
 
 ### Scraping the Index Page
 

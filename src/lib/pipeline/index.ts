@@ -300,7 +300,7 @@ async function findInformationTableUrl(indexUrl: string): Promise<string | null>
     // Look for 50240.xml or similar information table documents
     // Pattern: /Archives/edgar/data/<cik>/<acc>/<number>.xml where number is not the accession
     // Use [^"]* (not [^"]+) to avoid greedy matching across HTML tags
-    const matches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*50240\.xml)"/g)]
+    const matches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*50240\.xml)"/gi)]
     if (matches.length > 0) {
       const path = matches[0][1]
       // Convert relative path to absolute URL
@@ -309,7 +309,7 @@ async function findInformationTableUrl(indexUrl: string): Promise<string | null>
 
     // Also try: look for infotable.xml or similar
     // Prefer the NON-XSL version (raw XML) over xslForm13F_X02/ (which is HTML)
-    const infoMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*infotable\.xml)"/g)]
+    const infoMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*infotable\.xml)"/gi)]
     // Find non-XSL version first
     for (const match of infoMatches) {
       const path = match[1]
@@ -327,7 +327,8 @@ async function findInformationTableUrl(indexUrl: string): Promise<string | null>
 
     // Last resort: any .xml that's NOT primary_doc and NOT accession-numbered
     // Use [^"]* (not [^"]+) to avoid greedy matching across HTML tags
-    const xmlMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*\.xml)"/g)]
+    // Use /i flag to match .XML (uppercase) as well as .xml
+    const xmlMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*\.xml)"/gi)]
     for (const match of xmlMatches) {
       const url = match[1]
       // Skip primary_doc (cover page) and accession-numbered files
