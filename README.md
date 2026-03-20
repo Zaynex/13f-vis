@@ -66,6 +66,10 @@ Pre-seeded institutions and their correct SEC CIKs:
 
 For engineers working on the parsing pipeline, see `docs/SEC-FILING-FORMATS.md` — covers all three 13F filing formats (XML variants, HTML table structure, EDGAR URL conventions), common parsing bugs, and real examples from production filings.
 
+## Glossary
+
+For users unfamiliar with financial terminology (CUSIP, 13F, ETF, split-adjusted shares, etc.), see `docs/GLOSSARY.md` — explains all the terms used in the UI and what they mean for your investment analysis.
+
 ## Tech Stack
 
 - Next.js 15 (App Router, TypeScript)

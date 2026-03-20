@@ -11,6 +11,15 @@
 
 import type { ChangeType } from '@prisma/client'
 import { ChangeBadge } from './ChangeBadge'
+import { InfoTooltip } from './InfoTooltip'
+
+const GLOSSARY = {
+  cusip: 'CUSIP (Committee on Uniform Security Identification Procedures) — A 9-character unique identifier for each security. Used instead of company name because names vary across filers.',
+  shares: 'Split-adjusted share count. Raw 13F counts are adjusted for stock splits to enable accurate quarter-over-quarter comparison.',
+  value: 'Market value in USD. Calculated as shares × price-per-share on the filing date.',
+  change: 'Quarter-over-quarter change in shares. ▲ = increased >1%, ▼ = decreased >1%, ★ = new position, ✕ = exited.',
+  etf: 'ETF (Exchange-Traded Fund) — A fund that trades on exchanges like a stock. One ETF ticker can represent dozens of underlying holdings.',
+}
 
 export interface HoldingRow {
   cusip: string
@@ -69,10 +78,18 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
               <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Company</th>
-              <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">CUSIP</th>
-              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">Shares</th>
-              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">Value</th>
-              <th className="pl-3 pr-4 py-3 text-right font-medium text-[var(--muted-foreground)]">Change</th>
+              <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
+              </th>
+              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.shares}>Shares</InfoTooltip>
+              </th>
+              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.value}>Value</InfoTooltip>
+              </th>
+              <th className="pl-3 pr-4 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.change}>Change</InfoTooltip>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -104,10 +121,18 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
               <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Company</th>
-              <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">CUSIP</th>
-              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">Shares</th>
-              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">Value</th>
-              <th className="pl-3 pr-4 py-3 text-right font-medium text-[var(--muted-foreground)]">Change</th>
+              <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
+              </th>
+              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.shares}>Shares</InfoTooltip>
+              </th>
+              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.value}>Value</InfoTooltip>
+              </th>
+              <th className="pl-3 pr-4 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.change}>Change</InfoTooltip>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
