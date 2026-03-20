@@ -66,7 +66,7 @@ export async function GET(
       }
 
       // Build per-quarter CUSIP maps
-      const byQuarter = new Map<string, Map<string, { companyName: string; adjustedShares: bigint; rawValue: number }>>()
+      const byQuarter = new Map<string, Map<string, { companyName: string; adjustedShares: number; rawValue: number }>>()
       for (const filing of filings) {
         const map = new Map(
           filing.holdings.map((h) => [

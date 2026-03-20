@@ -232,7 +232,7 @@ Example (Berkshire Hathaway, Ally Financial appears 6 times):
 | `No holdings found in XML. Root keys: ns1:informationTable` | Parser only checks `ns2:`, need `ns1:` support |
 | `Filing not found: .../file.XML` (404) | Regex `\.xml` is case-sensitive — need `/i` flag to match `.XML` |
 | `Filing not found: .../50240.xml` | Accession used twice in URL (dashes removed from both CIK path and filename) |
-| `403 Forbidden` from Yahoo Finance | Yahoo Finance chart API requires cookies/crumb — not usable server-side without a valid crumb token |
+| `403 Forbidden` from Yahoo Finance | Yahoo Finance chart API requires cookies/crumb — not usable server-side without a valid crumb token. Use `--no-split-adjust` to skip Yahoo Finance calls and use raw shares. |
 
 ---
 
@@ -258,6 +258,8 @@ The pipeline's `fetchFilingMeta()` filters for forms containing `13F` and select
 
 SEC EDGAR enforces rate limits:
 - **User-Agent required** — must include contact info: `'13F Tracker vincent@example.com'`
-- **10 requests/second** limit — the pipeline enforces 1 request/second with `REQUEST_DELAY_MS = 1000`
+- **10 requests/second** limit — the pipeline enforces 5 requests/second with 3 concurrent workers, using exponential backoff on 429 responses.
+
+The `RateLimiter` class (`src/lib/pipeline/rate-limiter.ts`) implements this with a semaphore pattern. Use `--no-split-adjust` to skip Yahoo Finance split adjustment entirely (useful when Yahoo Finance returns 403 errors).
 
 Do not change the User-Agent to a generic value — SEC EDGAR will block non-identifying requests.

@@ -17,8 +17,13 @@ npm run db:generate   # Generate Prisma client
 npm run db:push        # Push schema to database
 npm run db:seed        # Seed initial institution set
 
-# 4. Fetch 13F data (example: Berkshire Hathaway, Q4 2025)
-npm run pipeline:run -- --cik 0001067983 --quarter 2025-Q4
+# 4. Fetch 13F data
+npm run pipeline:run -- --cik 0001067983 --quarter 2025-Q4   # single quarter
+npm run pipeline:run -- --all                                # recent quarter for all institutions
+npm run pipeline:run -- --all --backfill                     # ALL historical quarters (slow)
+npm run pipeline:run -- --all --backfill --max-quarters 8    # last 8 quarters per institution
+npm run pipeline:run -- --cik 0001067983 --backfill          # backfill single institution
+npm run pipeline:run -- --cik 0001067983 --backfill --no-split-adjust  # skip Yahoo Finance
 
 # 5. Start dev server
 npm run dev
