@@ -13,7 +13,11 @@
     "db:seed": "tsx prisma/seed.ts",
     "pipeline:run": "tsx src/lib/pipeline/run.ts",
     "test": "vitest",
-    "test:fixtures": "vitest run src/lib/parser"
+    "test:unit": "vitest run tests/unit",
+    "test:api": "vitest run tests/api",
+    "test:all": "vitest run tests",
+    "test:fixtures": "vitest run src/lib/parser",
+    "test:watch": "vitest tests"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -31,11 +35,17 @@
     "@types/react-dom": "^18",
     "@types/xml2js": "^0.4.14",
     "autoprefixer": "^10.4.20",
+    "msw": "^2.12.13",
     "postcss": "^8.4.47",
     "prisma": "^5.22.0",
     "tailwindcss": "^3.4.14",
     "tsx": "^4.19.1",
     "typescript": "^5",
     "vitest": "^2.1.4"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }
