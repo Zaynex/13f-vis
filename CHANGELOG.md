@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.3] - 2026-03-21
+
+### Fixed
+- **filedAt now uses SEC filing date** — `meta.filedAt` (SEC filing date from EDGAR API) is now used for split adjustment and database storage instead of the HTTP `Date` header. This fixes the quarter sorting issue where filings appeared in insertion order rather than chronological order due to identical `filedAt` timestamps.
+
+### Added
+- **Quarter selector on institution page** — Users can now switch to any available quarter directly on the institution page (`/institutions/[cik]`) via a dropdown, without needing to navigate to the tracker page.
+- **Single-quarter mode in tracker** — Added "Single" toggle button to the tracker page for viewing a single quarter's holdings in isolation.
+
 ## [0.2.2] - 2026-03-21
 
 ### Added

@@ -15,6 +15,8 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChangeBadge } from '@/components/ChangeBadge'
 import { InfoTooltip } from '@/components/InfoTooltip'
+import { HoldingsTable } from '@/components/HoldingsTable'
+import type { HoldingRow } from '@/components/HoldingsTable'
 
 const GLOSSARY = {
   cusip: 'CUSIP (Committee on Uniform Security Identification Procedures) — A 9-character unique identifier for each security.',
@@ -67,6 +69,13 @@ interface MultiTrackerData {
     companyName: string
     values: Array<{ quarter: string; adjustedShares: number | null; rawValue: number | null }>
   }>
+}
+
+interface SingleHoldingsData {
+  institution: { cik: string; name: string }
+  filing: { quarter: string; filedAt: string; filingUrl: string | null; holdingsFetchedAt: string | null } | null
+  holdings: HoldingRow[]
+  priorQuarter: string | null
 }
 
 function formatValue(n: number): string {
@@ -345,12 +354,14 @@ function TrackerPageContent() {
   const [to, setTo] = useState(searchParams.get('to') ?? '')
   const [data, setData] = useState<TrackerData | null>(null)
   const [multiData, setMultiData] = useState<MultiTrackerData | null>(null)
+  const [singleData, setSingleData] = useState<SingleHoldingsData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mode, setMode] = useState<'two-way' | 'multi'>(() => {
+  const [mode, setMode] = useState<'two-way' | 'multi' | 'single'>(() => {
     if (searchParams.get('quarters')) return 'multi'
     return 'two-way'
   })
+  const [singleQuarter, setSingleQuarter] = useState(searchParams.get('quarter') ?? '')
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>(() => {
     const q = searchParams.get('quarters')
     // Always store in reverse chronological order (newest first)
@@ -381,6 +392,10 @@ function TrackerPageContent() {
             } else {
               setSelectedQuarters(quarters.slice())
             }
+          }
+          // Single-mode default: most recent quarter
+          if (!singleQuarter && quarters.length >= 1) {
+            setSingleQuarter(quarters[0])
           }
         }
       })
@@ -434,14 +449,38 @@ function TrackerPageContent() {
     }
   }, [cik, router])
 
+  const fetchSingleHoldings = useCallback(async (quarter: string) => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/institutions/${cik}/holdings?quarter=${quarter}`)
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error ?? 'Failed to fetch')
+      }
+      const json: SingleHoldingsData = await res.json()
+      setSingleData(json)
+      const params = new URLSearchParams()
+      params.set('quarter', quarter)
+      router.replace(`/tracker/${cik}?${params.toString()}`, { scroll: false })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+      setSingleData(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cik, router])
+
   // Fetch when quarters change
   useEffect(() => {
     if (mode === 'two-way' && from && to) {
       fetchComparison(from, to)
     } else if (mode === 'multi' && selectedQuarters.length >= 2) {
       fetchMultiComparison(selectedQuarters)
+    } else if (mode === 'single' && singleQuarter) {
+      fetchSingleHoldings(singleQuarter)
     }
-  }, [mode, from, to, selectedQuarters, fetchComparison, fetchMultiComparison])
+  }, [mode, from, to, selectedQuarters, singleQuarter, fetchComparison, fetchMultiComparison, fetchSingleHoldings])
 
   return (
     <main className="min-h-screen px-4 py-8">
@@ -449,7 +488,7 @@ function TrackerPageContent() {
         {/* Header */}
         <div className="mb-6">
           <Link href={`/institutions/${cik}`} className="mb-4 inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-            ← {data?.institution.name ?? multiData?.institution.name ?? 'Institution'}
+            ← {data?.institution.name ?? multiData?.institution.name ?? singleData?.institution.name ?? 'Institution'}
           </Link>
           <h1 className="text-2xl font-bold mt-2">Holdings Tracker</h1>
           {mode === 'two-way' && data && (
@@ -460,6 +499,11 @@ function TrackerPageContent() {
           {mode === 'multi' && multiData && (
             <p className="mt-1 text-[var(--muted-foreground)]">
               Multi-quarter: {multiData.quarters.join(' → ')}
+            </p>
+          )}
+          {mode === 'single' && singleData && (
+            <p className="mt-1 text-[var(--muted-foreground)]">
+              {singleData.filing?.quarter ?? singleQuarter}
             </p>
           )}
         </div>
@@ -487,6 +531,16 @@ function TrackerPageContent() {
               }`}
             >
               Multi-quarter
+            </button>
+            <button
+              onClick={() => setMode('single')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === 'single'
+                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+              }`}
+            >
+              Single
             </button>
           </div>
 
@@ -517,7 +571,7 @@ function TrackerPageContent() {
                 </select>
               </div>
             </>
-          ) : (
+          ) : mode === 'multi' ? (
             <>
               <div>
                 <label className="block text-xs text-[var(--muted-foreground)] mb-1">Select quarters</label>
@@ -552,6 +606,21 @@ function TrackerPageContent() {
                 {selectedQuarters.length < 2 && (
                   <p className="text-xs text-[var(--muted-foreground)] mt-1">Select at least 2 quarters</p>
                 )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1">Quarter</label>
+                <select
+                  value={singleQuarter}
+                  onChange={(e) => setSingleQuarter(e.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]/20"
+                >
+                  {availableQuarters.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
               </div>
             </>
           )}
@@ -634,6 +703,11 @@ function TrackerPageContent() {
               <MultiTrendTable data={multiData} />
             </div>
           </>
+        )}
+
+        {/* Data — Single-quarter mode */}
+        {!isLoading && mode === 'single' && singleData && (
+          <HoldingsTable holdings={singleData.holdings} />
         )}
       </div>
     </main>
