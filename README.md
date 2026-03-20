@@ -52,13 +52,13 @@ React Frontend (holdings dashboard + comparison view)
 Pre-seeded institutions and their correct SEC CIKs:
 - Berkshire Hathaway (`0001067983`) — 42 holdings loaded ✅
 - Bridgewater Associates (`0001600319`) — 448 holdings loaded ✅
+- Brown Brothers Harriman (`0000014661`) — 1833 holdings loaded ✅
+- Susquehanna International Group (`0001765924`) — 107 holdings loaded ✅
 - Citadel Advisors (`0001576996`) — 13F-NT only (no holdings)
-- Two Sigma Investments (`0001569734`) — correct CIK, not yet loaded
+- Two Sigma Investments (`0001569734`) — 13F-NT only (no holdings)
 - Point72 Asset Management (`0002017863`) — 13F-NT only (no holdings)
-- Susquehanna International Group (`0001765924`) — correct CIK, not yet loaded
-- Brown Brothers Harriman (`0000014661`) — correct CIK, not yet loaded
 - Vanguard Group (`0000947529`) — 13F-NT only (no holdings)
-- BlackRock Institutional Trust (`0001483438`) — correct CIK, not yet loaded
+- BlackRock (Isle of Man) (`0001483438`) — 13F-NT only (no holdings)
 
 > Note: Some seeded CIKs were incorrect. See `docs/SEC-FILING-FORMATS.md` for details on how to verify CIKs via SEC EDGAR.
 

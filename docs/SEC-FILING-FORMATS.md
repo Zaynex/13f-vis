@@ -230,6 +230,7 @@ Example (Berkshire Hathaway, Ally Financial appears 6 times):
 | `shares = 0` but `value > 0` | `shrsOrPrnAmt` is an array — need `[0].sshPrnamt[0]` |
 | `Could not find a valid 13F holdings table in HTML` | HTML table column labels in rows 1-3, not row 0 |
 | `No holdings found in XML. Root keys: ns1:informationTable` | Parser only checks `ns2:`, need `ns1:` support |
+| `Filing not found: .../file.XML` (404) | Regex `\.xml` is case-sensitive — need `/i` flag to match `.XML` |
 | `Filing not found: .../50240.xml` | Accession used twice in URL (dashes removed from both CIK path and filename) |
 | `403 Forbidden` from Yahoo Finance | Yahoo Finance chart API requires cookies/crumb — not usable server-side without a valid crumb token |
 
