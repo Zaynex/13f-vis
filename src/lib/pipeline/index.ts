@@ -86,7 +86,7 @@ export async function runPipeline(
   )
 
   // 2. Fetch raw filing content (rate-limited + retry)
-  const { content, filedAt } = await rateLimiter.run(() =>
+  const { content } = await rateLimiter.run(() =>
     withRetry(
       () => fetchFilingContent(meta.filingUrl),
       {
@@ -102,7 +102,8 @@ export async function runPipeline(
   const rawHoldings = await parse13FFiling(content, meta.filingUrl)
 
   // 4. Apply split adjustments (or skip if flag set)
-  const filingDate = new Date(filedAt)
+  // Use meta.filedAt (SEC filing date), NOT the HTTP Date header from fetchFilingContent
+  const filingDate = new Date(meta.filedAt)
   let splitAdjustedHoldings
 
   if (options?.skipSplitAdjustment) {
@@ -172,7 +173,7 @@ export async function runPipeline(
 
   // 6. Upsert to DB (or skip if dry-run)
   if (!options?.skipUpsert) {
-    await upsertFilingAndHoldings(cik, quarter, meta.filingUrl, filedAt, enrichedHoldings)
+    await upsertFilingAndHoldings(cik, quarter, meta.filingUrl, meta.filedAt, enrichedHoldings)
   }
 
   return {
@@ -180,7 +181,7 @@ export async function runPipeline(
     quarter,
     holdingsProcessed: enrichedHoldings.length,
     filingUrl: meta.filingUrl,
-    filedAt: new Date(filedAt),
+    filedAt: new Date(meta.filedAt),
   }
 }
 

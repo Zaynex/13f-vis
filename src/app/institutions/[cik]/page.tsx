@@ -187,10 +187,28 @@ export default function InstitutionPage() {
           </div>
         </div>
 
-        {/* Filing info banner */}
-        {data && (
-          <FilingBanner filing={data.filing} priorQuarter={data.priorQuarter} />
-        )}
+        {/* Quarter selector + Filing info banner */}
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-[var(--muted-foreground)]">Quarter</label>
+            <select
+              value={selectedQuarter ?? ''}
+              onChange={(e) => {
+                const q = e.target.value
+                setSelectedQuarter(q)
+                fetchHoldings(q)
+              }}
+              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]/20"
+            >
+              {quarters.map((q) => (
+                <option key={q} value={q}>{q}</option>
+              ))}
+            </select>
+          </div>
+          {data && (
+            <FilingBanner filing={data.filing} priorQuarter={data.priorQuarter} />
+          )}
+        </div>
 
         {/* Holdings table */}
         <div className="mt-6">
