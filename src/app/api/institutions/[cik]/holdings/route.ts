@@ -7,12 +7,12 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   request: Request,
-  { params }: { params: { cik: string } },
+  { params }: { params: Promise<{ cik: string }> },
 ) {
   const { searchParams } = new URL(request.url)
   const quarter = searchParams.get('quarter') ?? undefined
 
-  const cik = params.cik
+  const { cik } = await params
 
   try {
     // Find the institution

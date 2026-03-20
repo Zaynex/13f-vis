@@ -6,9 +6,9 @@ import { prisma } from '@/lib/prisma'
 
 export async function GET(
   _request: Request,
-  { params }: { params: { cik: string } },
+  { params }: { params: Promise<{ cik: string }> },
 ) {
-  const cik = params.cik
+  const { cik } = await params
 
   try {
     const institution = await prisma.institution.findUnique({
