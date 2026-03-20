@@ -51,6 +51,16 @@ interface TrackerData {
   }
 }
 
+interface MultiTrackerData {
+  institution: { cik: string; name: string }
+  quarters: string[]
+  holdings: Array<{
+    cusip: string
+    companyName: string
+    values: Array<{ quarter: string; adjustedShares: number | null; rawValue: number | null }>
+  }>
+}
+
 function formatValue(n: number): string {
   if (Math.abs(n) >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`
   if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
@@ -136,6 +146,88 @@ function DiffTable({ entries, title, empty }: { entries: DiffEntry[]; title: str
   )
 }
 
+function MultiTrendTable({ data }: { data: MultiTrackerData }) {
+  const { quarters, holdings } = data
+  if (holdings.length === 0) {
+    return (
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] py-12 text-center text-[var(--muted-foreground)]">
+        No holdings data available.
+      </div>
+    )
+  }
+
+  // Determine column count — cap visible quarters at 6 for readability
+  const visibleQuarters = quarters.slice(0, 6)
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-[var(--border)]">
+      <table className="w-full text-sm min-w-[600px]">
+        <thead>
+          <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
+            <th className="px-4 py-2.5 text-left font-medium text-[var(--muted-foreground)] sticky left-0 bg-[var(--muted)] z-10">Company</th>
+            <th className="px-3 py-2.5 text-left font-medium text-[var(--muted-foreground)]">CUSIP</th>
+            {visibleQuarters.map((q) => (
+              <th key={q} className="px-3 py-2.5 text-right font-medium text-[var(--muted-foreground)]">{q}</th>
+            ))}
+            {quarters.length > 6 && (
+              <th className="px-3 py-2.5 text-right font-medium text-[var(--muted-foreground)]">...</th>
+            )}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-[var(--border)]">
+          {holdings.map((h) => {
+            const vals = h.values.filter((v) => visibleQuarters.includes(v.quarter))
+            const firstVal = vals[0]
+            const lastVal = vals[vals.length - 1]
+
+            // Determine trend arrow
+            let trend: 'up' | 'down' | 'flat' | 'new' | 'exited' | null = null
+            if (firstVal?.adjustedShares === null && lastVal?.adjustedShares !== null) trend = 'new'
+            else if (firstVal?.adjustedShares !== null && lastVal?.adjustedShares === null) trend = 'exited'
+            else if (firstVal && lastVal && firstVal.adjustedShares !== null && lastVal.adjustedShares !== null) {
+              const delta = lastVal.adjustedShares - firstVal.adjustedShares
+              if (delta > 0) trend = 'up'
+              else if (delta < 0) trend = 'down'
+              else trend = 'flat'
+            }
+
+            const trendColor = trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : trend === 'new' ? 'text-green-500' : trend === 'exited' ? 'text-red-500' : 'text-[var(--muted-foreground)]'
+            const trendArrow = trend === 'up' ? '↑' : trend === 'down' ? '↓' : trend === 'new' ? '★' : trend === 'exited' ? '✕' : '→'
+
+            return (
+              <tr key={h.cusip} className="hover:bg-[var(--muted)]/50">
+                <td className="px-4 py-2.5 font-medium sticky left-0 bg-[var(--card)] z-10">
+                  <span className="flex items-center gap-1.5">
+                    <span className={trendColor}>{trendArrow}</span>
+                    {h.companyName}
+                  </span>
+                </td>
+                <td className="px-3 py-2.5 font-mono text-xs text-[var(--muted-foreground)]">{h.cusip}</td>
+                {vals.map((v) => {
+                  const isNull = v.adjustedShares === null
+                  return (
+                    <td key={v.quarter} className="px-3 py-2.5 text-right tabular-nums">
+                      {isNull ? (
+                        <span className="text-[var(--muted-foreground)] text-xs">—</span>
+                      ) : (
+                        <div>
+                          <div>{formatShares(v.adjustedShares)}</div>
+                          <div className="text-xs text-[var(--muted-foreground)]">{formatValue(v.rawValue ?? 0)}</div>
+                        </div>
+                      )}
+                    </td>
+                  )
+                })}
+                {quarters.length > 6 && <td className="px-3 py-2.5 text-right text-[var(--muted-foreground)]">+{quarters.length - 6}</td>}
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function SummaryBar({ data, from, to }: { data: TrackerData['summary']; from: string; to: string }) {
   const deltaSign = data.valueDelta >= 0 ? '+' : ''
   const deltaColor = data.valueDelta >= 0 ? 'text-green-500' : 'text-red-500'
@@ -200,8 +292,17 @@ function TrackerPageContent() {
   const [from, setFrom] = useState(searchParams.get('from') ?? '')
   const [to, setTo] = useState(searchParams.get('to') ?? '')
   const [data, setData] = useState<TrackerData | null>(null)
+  const [multiData, setMultiData] = useState<MultiTrackerData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mode, setMode] = useState<'two-way' | 'multi'>(() => {
+    if (searchParams.get('quarters')) return 'multi'
+    return 'two-way'
+  })
+  const [selectedQuarters, setSelectedQuarters] = useState<string[]>(() => {
+    const q = searchParams.get('quarters')
+    return q ? q.split(',').filter(Boolean) : []
+  })
 
   // Load available quarters from institution API
   useEffect(() => {
@@ -219,6 +320,14 @@ function TrackerPageContent() {
             setFrom(quarters[1])
           } else if (!from && quarters.length === 1) {
             setFrom(quarters[0])
+          }
+          // Multi-mode default: most recent 4 quarters
+          if (selectedQuarters.length === 0) {
+            if (quarters.length >= 4) {
+              setSelectedQuarters(quarters.slice(0, 4))
+            } else {
+              setSelectedQuarters(quarters.slice())
+            }
           }
         }
       })
@@ -249,12 +358,37 @@ function TrackerPageContent() {
     }
   }, [cik, router])
 
+  const fetchMultiComparison = useCallback(async (quarters: string[]) => {
+    if (quarters.length < 2) return
+    setIsLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/tracker/${cik}?quarters=${quarters.join(',')}`)
+      if (!res.ok) {
+        const json = await res.json()
+        throw new Error(json.error ?? 'Failed to fetch')
+      }
+      const json: MultiTrackerData = await res.json()
+      setMultiData(json)
+      const params = new URLSearchParams()
+      params.set('quarters', quarters.join(','))
+      router.replace(`/tracker/${cik}?${params.toString()}`, { scroll: false })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load')
+      setMultiData(null)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [cik, router])
+
   // Fetch when quarters change
   useEffect(() => {
-    if (from && to) {
+    if (mode === 'two-way' && from && to) {
       fetchComparison(from, to)
+    } else if (mode === 'multi' && selectedQuarters.length >= 2) {
+      fetchMultiComparison(selectedQuarters)
     }
-  }, [from, to, fetchComparison])
+  }, [mode, from, to, selectedQuarters, fetchComparison, fetchMultiComparison])
 
   return (
     <main className="min-h-screen px-4 py-8">
@@ -262,42 +396,111 @@ function TrackerPageContent() {
         {/* Header */}
         <div className="mb-6">
           <Link href={`/institutions/${cik}`} className="mb-4 inline-flex items-center gap-1 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-            ← {data?.institution.name ?? 'Institution'}
+            ← {data?.institution.name ?? multiData?.institution.name ?? 'Institution'}
           </Link>
           <h1 className="text-2xl font-bold mt-2">Holdings Tracker</h1>
-          {data && (
+          {mode === 'two-way' && data && (
             <p className="mt-1 text-[var(--muted-foreground)]">
               Comparing {from} → {to}
             </p>
           )}
+          {mode === 'multi' && multiData && (
+            <p className="mt-1 text-[var(--muted-foreground)]">
+              Multi-quarter: {multiData.quarters.join(' → ')}
+            </p>
+          )}
         </div>
 
-        {/* Quarter selectors */}
+        {/* Mode toggle + Quarter selectors */}
         <div className="flex flex-wrap gap-4 mb-6">
-          <div>
-            <label className="block text-xs text-[var(--muted-foreground)] mb-1">From quarter</label>
-            <select
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]/20"
+          {/* Mode toggle */}
+          <div className="flex rounded-lg border border-[var(--border)] bg-[var(--muted)] p-0.5 gap-0.5">
+            <button
+              onClick={() => setMode('two-way')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === 'two-way'
+                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+              }`}
             >
-              {availableQuarters.map((q) => (
-                <option key={q} value={q}>{q}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-[var(--muted-foreground)] mb-1">To quarter</label>
-            <select
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]/20"
+              Two-way
+            </button>
+            <button
+              onClick={() => setMode('multi')}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                mode === 'multi'
+                  ? 'bg-[var(--card)] text-[var(--foreground)] shadow-sm'
+                  : 'text-[var(--muted-foreground)] hover:text-[var(--foreground)]'
+              }`}
             >
-              {availableQuarters.map((q) => (
-                <option key={q} value={q}>{q}</option>
-              ))}
-            </select>
+              Multi-quarter
+            </button>
           </div>
+
+          {mode === 'two-way' ? (
+            <>
+              <div>
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1">From quarter</label>
+                <select
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]/20"
+                >
+                  {availableQuarters.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1">To quarter</label>
+                <select
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--accent)] focus:ring-2 focus:ring-[var(--ring)]/20"
+                >
+                  {availableQuarters.map((q) => (
+                    <option key={q} value={q}>{q}</option>
+                  ))}
+                </select>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs text-[var(--muted-foreground)] mb-1">Select quarters</label>
+                <div className="flex flex-wrap gap-2">
+                  {availableQuarters.map((q) => {
+                    const isSelected = selectedQuarters.includes(q)
+                    return (
+                      <button
+                        key={q}
+                        onClick={() => {
+                          if (isSelected) {
+                            if (selectedQuarters.length > 2) {
+                              setSelectedQuarters(selectedQuarters.filter((sq) => sq !== q))
+                            }
+                          } else {
+                            setSelectedQuarters([...selectedQuarters, q].sort().reverse())
+                          }
+                        }}
+                        className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          isSelected
+                            ? 'border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]'
+                            : 'border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--accent)]'
+                        }`}
+                      >
+                        {q}
+                      </button>
+                    )
+                  })}
+                </div>
+                {selectedQuarters.length < 2 && (
+                  <p className="text-xs text-[var(--muted-foreground)] mt-1">Select at least 2 quarters</p>
+                )}
+              </div>
+            </>
+          )}
+
           <div className="flex items-end">
             <Link
               href={`/institutions/${cik}`}
@@ -322,8 +525,8 @@ function TrackerPageContent() {
           </div>
         )}
 
-        {/* Data */}
-        {!isLoading && data && (
+        {/* Data — Two-way mode */}
+        {!isLoading && mode === 'two-way' && data && (
           <>
             <SummaryBar data={data.summary} from={from} to={to} />
 
@@ -366,7 +569,56 @@ function TrackerPageContent() {
               )}
           </>
         )}
+
+        {/* Data — Multi-quarter mode */}
+        {!isLoading && mode === 'multi' && multiData && (
+          <>
+            <MultiSummaryRow data={multiData} />
+            <div className="mt-6">
+              <h2 className="text-sm font-semibold mb-3">All Positions by Quarter</h2>
+              <MultiTrendTable data={multiData} />
+            </div>
+          </>
+        )}
       </div>
     </main>
+  )
+}
+
+function MultiSummaryRow({ data }: { data: MultiTrackerData }) {
+  const { quarters, holdings } = data
+  // Compute total value per quarter
+  const quarterValues = quarters.map((q) => {
+    const total = holdings.reduce((sum, h) => {
+      const val = h.values.find((v) => v.quarter === q)
+      return sum + (val?.rawValue ?? 0)
+    }, 0)
+    return { quarter: q, total }
+  })
+  const firstTotal = quarterValues[0]?.total ?? 0
+  const lastTotal = quarterValues[quarterValues.length - 1]?.total ?? 0
+  const delta = lastTotal - firstTotal
+  const deltaPercent = firstTotal > 0 ? (delta / firstTotal) * 100 : null
+  const deltaSign = delta >= 0 ? '+' : ''
+  const deltaColor = delta >= 0 ? 'text-green-500' : 'text-red-500'
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      {quarterValues.map(({ quarter, total }) => (
+        <div key={quarter} className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+          <div className="text-xs text-[var(--muted-foreground)] mb-1">{quarter}</div>
+          <div className="text-lg font-semibold tabular-nums">{formatValue(total)}</div>
+        </div>
+      ))}
+      {deltaPercent !== null && (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+          <div className="text-xs text-[var(--muted-foreground)] mb-1">Change</div>
+          <div className={`text-lg font-semibold tabular-nums ${deltaColor}`}>
+            {deltaSign}{formatValue(delta)}
+            <span className="text-xs ml-1">({deltaSign}{deltaPercent.toFixed(1)}%)</span>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
