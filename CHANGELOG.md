@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.2] - 2026-03-21
+
+### Added
+- **Historical backfill** — `npm run pipeline:run -- --all --backfill` fetches all available historical quarters for each institution from SEC EDGAR. `--max-quarters N` limits how many quarters to backfill.
+- **Throughput optimization** — Pipeline now fetches from SEC EDGAR at 5 req/sec (3 concurrent workers) instead of 1 req/sec, plus exponential backoff retry on 429 errors.
+- **Rate limiter library** — New `RateLimiter` class with semaphore concurrency control and `withRetry` utility with configurable retry predicate.
+- **`--no-split-adjust` flag** — Skip Yahoo Finance API calls and use raw SEC EDGAR shares directly. Useful when Yahoo Finance is unavailable.
+
+### Fixed
+- **Type mismatch in tracker API** — `adjustedShares` changed from `bigint` to `number` to match actual Prisma schema type.
+
 ## [0.2.1] - 2026-03-21
 
 ### Added
