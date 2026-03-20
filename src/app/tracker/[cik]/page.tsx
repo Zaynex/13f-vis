@@ -301,7 +301,8 @@ function TrackerPageContent() {
   })
   const [selectedQuarters, setSelectedQuarters] = useState<string[]>(() => {
     const q = searchParams.get('quarters')
-    return q ? q.split(',').filter(Boolean) : []
+    // Always store in reverse chronological order (newest first)
+    return q ? q.split(',').filter(Boolean).sort().reverse() : []
   })
 
   // Load available quarters from institution API
@@ -480,7 +481,9 @@ function TrackerPageContent() {
                               setSelectedQuarters(selectedQuarters.filter((sq) => sq !== q))
                             }
                           } else {
-                            setSelectedQuarters([...selectedQuarters, q].sort().reverse())
+                            // Add in reverse chronological order (newest first)
+                            const updated = [...selectedQuarters, q].sort().reverse()
+                            setSelectedQuarters(updated)
                           }
                         }}
                         className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
