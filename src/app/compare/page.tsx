@@ -10,7 +10,7 @@
 // 2. Overlapping holdings (securities held by ALL selected funds)
 // 3. Unique per fund (securities held by only that fund)
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChangeBadge } from '@/components/ChangeBadge'
@@ -54,7 +54,7 @@ function FundChip({ name, onRemove }: { name: string; onRemove: () => void }) {
   )
 }
 
-export default function ComparePage() {
+function ComparePageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const initialCiks = (searchParams.get('ciks') ?? '').split(',').filter(Boolean)
@@ -339,5 +339,28 @@ export default function ComparePage() {
         )}
       </div>
     </main>
+  )
+}
+
+function ComparePageFallback() {
+  return (
+    <main className="min-h-screen px-4 py-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold">Compare Funds</h1>
+        </div>
+        <div className="flex items-center justify-center py-20">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--accent)]" />
+        </div>
+      </div>
+    </main>
+  )
+}
+
+export default function ComparePage() {
+  return (
+    <Suspense fallback={<ComparePageFallback />}>
+      <ComparePageContent />
+    </Suspense>
   )
 }
