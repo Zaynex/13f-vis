@@ -159,7 +159,7 @@ export async function parseXmlFiling(
   filingUrl: string,
 ): Promise<ParsedHolding[]> {
   try {
-    const parsed = await parseXml(content, { explicitArray: true, trim: true })
+    const parsed = await (parseXml as (content: string, opts: object) => Promise<object>)(content, { explicitArray: true, trim: true })
 
     // Try Variant 1: informationTable (50240.xml and similar)
     const variant1 = parseInfoTableVariant(parsed)

@@ -75,7 +75,8 @@ export function parseHtmlFiling(
 
     // Try each table until we find one that looks like a 13F holdings table
     for (const tableEl of tables) {
-      const rows: cheerio.Cheerio<cheerio.Element> = $(tableEl).find('tr')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows: cheerio.Cheerio<any> = $(tableEl).find('tr')
       if (rows.length < 3) continue // Need header + at least 2 data rows
 
       // SEC HTML filings have column labels spread across multiple header rows.
