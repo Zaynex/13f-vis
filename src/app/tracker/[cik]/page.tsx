@@ -180,15 +180,49 @@ function MultiTrendTable({ data }: { data: MultiTrackerData }) {
             const firstVal = vals[0]
             const lastVal = vals[vals.length - 1]
 
-            // Determine trend arrow
+            // NEW/EXITED: based on first vs last visible quarter
             let trend: 'up' | 'down' | 'flat' | 'new' | 'exited' | null = null
-            if (firstVal?.adjustedShares === null && lastVal?.adjustedShares !== null) trend = 'new'
-            else if (firstVal?.adjustedShares !== null && lastVal?.adjustedShares === null) trend = 'exited'
-            else if (firstVal && lastVal && firstVal.adjustedShares !== null && lastVal.adjustedShares !== null) {
-              const delta = lastVal.adjustedShares - firstVal.adjustedShares
-              if (delta > 0) trend = 'up'
-              else if (delta < 0) trend = 'down'
-              else trend = 'flat'
+            if (firstVal?.adjustedShares === null && lastVal?.adjustedShares !== null) {
+              trend = 'new'
+            } else if (firstVal?.adjustedShares !== null && lastVal?.adjustedShares === null) {
+              trend = 'exited'
+            } else {
+              // Trend: compare the two most recent consecutive non-null quarters
+              let recentVal: typeof vals[0] | null = null
+              let prevVal: typeof vals[0] | null = null
+
+              // Find most recent non-null
+              for (const v of vals) {
+                if (v.adjustedShares !== null) {
+                  recentVal = v
+                  break
+                }
+              }
+
+              // Find previous non-null (skip the most recent)
+              if (recentVal) {
+                let skipRecent = true
+                for (const v of vals) {
+                  if (v.adjustedShares === null) continue
+                  if (skipRecent) {
+                    skipRecent = false
+                    continue
+                  }
+                  prevVal = v
+                  break
+                }
+              }
+
+              if (!recentVal) {
+                trend = null
+              } else if (!prevVal) {
+                trend = recentVal.adjustedShares !== null ? 'flat' : null
+              } else if (recentVal.adjustedShares !== null && prevVal.adjustedShares !== null) {
+                const delta = recentVal.adjustedShares - prevVal.adjustedShares
+                if (delta > 0) trend = 'up'
+                else if (delta < 0) trend = 'down'
+                else trend = 'flat'
+              }
             }
 
             const trendColor = trend === 'up' ? 'text-green-500' : trend === 'down' ? 'text-red-500' : trend === 'new' ? 'text-green-500' : trend === 'exited' ? 'text-red-500' : 'text-[var(--muted-foreground)]'
