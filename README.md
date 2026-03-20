@@ -42,7 +42,7 @@ PostgreSQL (institutions / filings / holdings)
      ↓
 Next.js API Routes
      ↓
-React Frontend (holdings dashboard + comparison view)
+React Frontend (holdings dashboard + quarter selector + comparison view + tracker)
 ```
 
 ## Key Design Decisions
