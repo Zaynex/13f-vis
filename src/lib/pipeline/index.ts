@@ -40,6 +40,7 @@ import { parse13FFiling } from '../parser'
 import { getSplitAdjustedShares } from './split-adjuster'
 import { calculateChangeBadge, ChangeBadge } from '../schema'
 import { FetchError, RateLimitError, NotFoundError } from '../errors'
+import { rateLimiter, withRetry } from './rate-limiter'
 
 const prisma = new PrismaClient()
 
@@ -51,9 +52,6 @@ const EDGAR_HEADERS = {
   'User-Agent': '13F Tracker vincent@example.com',
   'Accept': 'application/json, text/html, application/xml',
 }
-
-// SEC EDGAR rate limits: 10 requests/second. We enforce 1 req/sec.
-const REQUEST_DELAY_MS = 1_000
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -74,13 +72,31 @@ export async function runPipeline(
   quarter: string,
   options?: { skipUpsert?: boolean },
 ): Promise<PipelineResult> {
-  // 1. Fetch filing metadata from SEC EDGAR
-  const meta = await fetchFilingMeta(cik, quarter)
-  await delay(REQUEST_DELAY_MS)
+  // 1. Fetch filing metadata from SEC EDGAR (rate-limited + retry)
+  const meta = await rateLimiter.run(() =>
+    withRetry(
+      () => fetchFilingMeta(cik, quarter),
+      {
+        isRetryable: (e) =>
+          e.message.includes('429') ||
+          e.message.includes('rate') ||
+          e.message.includes('fetch'),
+      },
+    ),
+  )
 
-  // 2. Fetch raw filing content
-  const { content, filedAt } = await fetchFilingContent(meta.filingUrl)
-  await delay(REQUEST_DELAY_MS)
+  // 2. Fetch raw filing content (rate-limited + retry)
+  const { content, filedAt } = await rateLimiter.run(() =>
+    withRetry(
+      () => fetchFilingContent(meta.filingUrl),
+      {
+        isRetryable: (e) =>
+          e.message.includes('429') ||
+          e.message.includes('rate') ||
+          e.message.includes('fetch'),
+      },
+    ),
+  )
 
   // 3. Parse into normalized holdings
   const rawHoldings = await parse13FFiling(content, meta.filingUrl)
@@ -391,6 +407,93 @@ async function getPriorQuarterHoldings(cik: string, quarter: string): Promise<Pr
   return priorFiling?.holdings ?? []
 }
 
+// ─── Quarter Utilities ─────────────────────────────────────────────────────
+
+/**
+ * Get all available 13F quarters for an institution from SEC EDGAR.
+ * Returns quarters in descending order (most recent first).
+ */
+export async function getAvailableQuarters(cik: string): Promise<string[]> {
+  const paddedCik = cik.padStart(10, '0')
+  const url = `${SUBMISSIONS_API}/CIK${paddedCik}.json`
+
+  const response = await rateLimiter.run(() =>
+    withRetry(
+      () =>
+        fetch(url, {
+          headers: EDGAR_HEADERS,
+          signal: AbortSignal.timeout(30_000),
+        }),
+      {
+        isRetryable: (e) =>
+          e.message.includes('429') || e.message.includes('rate') || e.message.includes('fetch'),
+      },
+    ),
+  )
+
+  if (!response.ok) {
+    throw new FetchError(`Failed to fetch submissions for CIK ${cik}: ${response.status}`, { filingUrl: url })
+  }
+
+  const data = await response.json()
+  const recent = data?.filings?.recent
+
+  if (!recent || !Array.isArray(recent.accessionNumber)) {
+    throw new FetchError(`Unexpected EDGAR response structure for CIK ${cik}`, { filingUrl: url })
+  }
+
+  // Collect all 13F filing dates
+  const quarters = new Set<string>()
+  const count = recent.accessionNumber.length
+
+  for (let i = 0; i < count; i++) {
+    const form = String(recent.form[i] ?? '').toUpperCase()
+    if (!form.includes('13F')) continue
+
+    const filingDate = String(recent.filingDate[i] ?? '')
+    if (!filingDate) continue
+
+    const quarter = filingDateToQuarter(filingDate)
+    if (quarter) {
+      quarters.add(quarter)
+    }
+  }
+
+  // Sort descending (most recent first)
+  return [...quarters].sort((a, b) => b.localeCompare(a))
+}
+
+/**
+ * Convert a filing date string (YYYY-MM-DD) to a quarter string (YYYY-QN).
+ */
+function filingDateToQuarter(dateStr: string): string | null {
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return null
+
+  const year = parseInt(match[1], 10)
+  const month = parseInt(match[2], 10)
+
+  // Q1: Jan-Mar (months 01-03) → Q1
+  // Q2: Apr-Jun (months 04-06) → Q2
+  // Q3: Jul-Sep (months 07-09) → Q3
+  // Q4: Oct-Dec (months 10-12) → Q4
+  const q = Math.ceil(month / 3)
+  return `${year}-Q${q}`
+}
+
+/**
+ * Get quarters that are missing from the local database.
+ */
+export async function getMissingQuarters(cik: string, availableQuarters: string[]): Promise<string[]> {
+  const existingFilings = await prisma.filing.findMany({
+    where: { institutionCik: cik },
+    select: { quarter: true },
+  })
+
+  const existingQuarters = new Set(existingFilings.map((f) => f.quarter))
+  return availableQuarters.filter((q) => !existingQuarters.has(q))
+}
+
 // ─── Step 6: Upsert ─────────────────────────────────────────────────────────
 
 interface EnrichedHolding {
@@ -461,10 +564,6 @@ async function upsertFilingAndHoldings(
 }
 
 // ─── Utilities ─────────────────────────────────────────────────────────────
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
-}
 
 function getPriorQuarter(quarter: string): string {
   const [year, qPart] = quarter.split('-Q')
