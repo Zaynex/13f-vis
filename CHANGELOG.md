@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.1] - 2026-03-21
+
+### Added
+- **Financial glossary** — Added `docs/GLOSSARY.md` with explanations for CUSIP, 13F Filing, ETF, QoQ, adjusted shares, and other financial terms.
+
+### Changed
+- **InfoTooltip on column headers** — Added hover tooltips to CUSIP, Shares, Value, Change columns explaining each term in HoldingsTable and Compare page.
+
+### Fixed
+- **Multi-quarter trend arrow logic** — Fixed bug where trend arrows compared first vs last quarter instead of two most recent consecutive quarters. APPLE INC now correctly shows ↓ when shares decreased from Q4→Q3.
+
+### Tests
+- **MSW test infrastructure** — Added Vitest with MSW (Mock Service Worker) for API endpoint testing. 27 tests covering change badge logic and data accuracy.
+
 ## [0.2.0] - 2026-03-20
 
 ### Added
