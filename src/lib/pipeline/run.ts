@@ -18,6 +18,7 @@ async function main() {
       all: { type: 'boolean' },
       backfill: { type: 'boolean' },
       'max-quarters': { type: 'string' },
+      'no-split-adjust': { type: 'boolean' },
       help: { type: 'boolean' },
     },
   })
@@ -31,34 +32,57 @@ Usage:
   npm run pipeline:run -- --all                               # run for all seeded institutions (recent quarter only)
   npm run pipeline:run -- --all --backfill                    # run for all seeded institutions, ALL available quarters
   npm run pipeline:run -- --all --backfill --max-quarters 8  # limit to last 8 quarters
+  npm run pipeline:run -- --cik 0001067983 --backfill --no-split-adjust  # skip Yahoo Finance split data
 
 Options:
-  --cik          10-digit zero-padded SEC CIK
-  --quarter      Quarter in YYYY-QN format (e.g. 2025-Q4)
-  --all          Run for all institutions in the database
-  --backfill     Fetch ALL available historical quarters (not just recent)
-  --max-quarters Limit how many quarters to backfill (default: unlimited)
+  --cik              10-digit zero-padded SEC CIK
+  --quarter          Quarter in YYYY-QN format (e.g. 2025-Q4)
+  --all              Run for all institutions in the database
+  --backfill         Fetch ALL available historical quarters (not just recent)
+  --max-quarters     Limit how many quarters to backfill (default: unlimited)
+  --no-split-adjust Skip Yahoo Finance split adjustment (use raw shares)
 `)
     process.exit(0)
+  }
+
+  const skipSplitAdjustment = values['no-split-adjust'] ?? false
+
+  if (skipSplitAdjustment) {
+    console.log('[pipeline] Note: Skipping Yahoo Finance split adjustment (using raw shares)')
   }
 
   if (values.all) {
     await runAllInstitutions({
       backfill: values.backfill ?? false,
       maxQuarters: values['max-quarters'] ? parseInt(values['max-quarters'], 10) : undefined,
+      skipSplitAdjustment,
     })
     return
   }
 
-  if (!values.cik || !values.quarter) {
-    console.error('[pipeline] Error: --cik and --quarter are required')
+  if (!values.cik) {
+    console.error('[pipeline] Error: --cik is required')
+    process.exit(1)
+  }
+
+  // Single CIK mode: with --backfill, fetch all available quarters
+  if (values.backfill) {
+    await runSingleInstitutionBackfill(values.cik, {
+      maxQuarters: values['max-quarters'] ? parseInt(values['max-quarters'], 10) : undefined,
+      skipSplitAdjustment,
+    })
+    return
+  }
+
+  if (!values.quarter) {
+    console.error('[pipeline] Error: --quarter is required (or use --backfill to fetch all quarters)')
     process.exit(1)
   }
 
   console.log(`[pipeline] Starting: CIK=${values.cik}, quarter=${values.quarter}`)
 
   try {
-    const result = await runPipeline(values.cik, values.quarter)
+    const result = await runPipeline(values.cik, values.quarter, { skipSplitAdjustment })
     console.log(`[pipeline] ✅ Success! Processed ${result.holdingsProcessed} holdings`)
     console.log(`[pipeline]    Filing: ${result.filingUrl}`)
     console.log(`[pipeline]    Filed:  ${result.filedAt.toISOString()}`)
@@ -71,10 +95,11 @@ Options:
 interface RunAllOptions {
   backfill: boolean
   maxQuarters?: number
+  skipSplitAdjustment: boolean
 }
 
 async function runAllInstitutions(options: RunAllOptions): Promise<void> {
-  const { backfill, maxQuarters } = options
+  const { backfill, maxQuarters, skipSplitAdjustment } = options
 
   // Get all institutions from DB
   const institutions = await prisma.institution.findMany({
@@ -119,7 +144,7 @@ async function runAllInstitutions(options: RunAllOptions): Promise<void> {
         for (const quarter of missing) {
           process.stdout.write(`[pipeline]   Fetching ${quarter}... `)
           try {
-            const result = await runPipeline(inst.cik, quarter)
+            const result = await runPipeline(inst.cik, quarter, { skipSplitAdjustment })
             console.log(`✅ ${result.holdingsProcessed} holdings`)
             totalProcessed++
           } catch (err) {
@@ -146,7 +171,7 @@ async function runAllInstitutions(options: RunAllOptions): Promise<void> {
 
         process.stdout.write(`[pipeline]   Fetching ${recentQuarter}... `)
         try {
-          const result = await runPipeline(inst.cik, recentQuarter)
+          const result = await runPipeline(inst.cik, recentQuarter, { skipSplitAdjustment })
           console.log(`✅ ${result.holdingsProcessed} holdings`)
           totalProcessed++
         } catch (err) {
@@ -172,6 +197,64 @@ async function runAllInstitutions(options: RunAllOptions): Promise<void> {
     }
   }
   console.log(`[pipeline] ═══════════════════════════════════════════`)
+}
+
+interface SingleBackfillOptions {
+  maxQuarters?: number
+  skipSplitAdjustment: boolean
+}
+
+async function runSingleInstitutionBackfill(cik: string, options: SingleBackfillOptions): Promise<void> {
+  const { maxQuarters, skipSplitAdjustment } = options
+
+  console.log(`[pipeline] Backfilling CIK=${cik}...`)
+
+  try {
+    console.log(`[pipeline]   Fetching available quarters from SEC EDGAR...`)
+    const available = await getAvailableQuarters(cik)
+    console.log(`[pipeline]   Found ${available.length} total quarters on SEC EDGAR`)
+
+    const quartersToFetch = maxQuarters ? available.slice(0, maxQuarters) : available
+    console.log(`[pipeline]   Will fetch ${quartersToFetch.length} quarters`)
+
+    const missing = await getMissingQuarters(cik, quartersToFetch)
+    console.log(`[pipeline]   Missing in DB: ${missing.length} quarters`)
+
+    if (missing.length === 0) {
+      console.log(`[pipeline] ✅ Already up to date!`)
+      return
+    }
+
+    let totalProcessed = 0
+    let totalFailed = 0
+    const failed: Array<{ quarter: string; error: string }> = []
+
+    for (const quarter of missing) {
+      process.stdout.write(`[pipeline]   Fetching ${quarter}... `)
+      try {
+        const result = await runPipeline(cik, quarter, { skipSplitAdjustment })
+        console.log(`✅ ${result.holdingsProcessed} holdings`)
+        totalProcessed++
+      } catch (err) {
+        console.log(`❌ ${err instanceof Error ? err.message : String(err)}`)
+        totalFailed++
+        failed.push({ quarter, error: String(err) })
+      }
+    }
+
+    console.log(`\n[pipeline] ═══════════════════════════════════════════`)
+    console.log(`[pipeline]   Processed: ${totalProcessed} filings`)
+    if (totalFailed > 0) {
+      console.log(`[pipeline]   Failed:    ${totalFailed} filings`)
+      for (const f of failed) {
+        console.log(`[pipeline]     - ${f.quarter}: ${f.error}`)
+      }
+    }
+    console.log(`[pipeline] ═══════════════════════════════════════════`)
+  } catch (err) {
+    console.error(`[pipeline] ❌ Failed: ${err instanceof Error ? err.message : String(err)}`)
+    process.exit(1)
+  }
 }
 
 main()

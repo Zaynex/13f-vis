@@ -70,7 +70,7 @@ export interface PipelineResult {
 export async function runPipeline(
   cik: string,
   quarter: string,
-  options?: { skipUpsert?: boolean },
+  options?: { skipUpsert?: boolean; skipSplitAdjustment?: boolean },
 ): Promise<PipelineResult> {
   // 1. Fetch filing metadata from SEC EDGAR (rate-limited + retry)
   const meta = await rateLimiter.run(() =>
@@ -101,18 +101,29 @@ export async function runPipeline(
   // 3. Parse into normalized holdings
   const rawHoldings = await parse13FFiling(content, meta.filingUrl)
 
-  // 4. Apply split adjustments
+  // 4. Apply split adjustments (or skip if flag set)
   const filingDate = new Date(filedAt)
-  const splitAdjustedHoldings = await Promise.all(
-    rawHoldings.map(async (h) => {
-      const { adjustedShares, cumulativeFactor } = await getSplitAdjustedShares(
-        h.cusip,
-        h.shares,
-        filingDate,
-      )
-      return { ...h, adjustedShares, cumulativeFactor }
-    }),
-  )
+  let splitAdjustedHoldings
+
+  if (options?.skipSplitAdjustment) {
+    // Skip Yahoo Finance calls — use raw shares as adjusted
+    splitAdjustedHoldings = rawHoldings.map((h) => ({
+      ...h,
+      adjustedShares: h.shares,
+      cumulativeFactor: 1.0,
+    }))
+  } else {
+    splitAdjustedHoldings = await Promise.all(
+      rawHoldings.map(async (h) => {
+        const { adjustedShares, cumulativeFactor } = await getSplitAdjustedShares(
+          h.cusip,
+          h.shares,
+          filingDate,
+        )
+        return { ...h, adjustedShares, cumulativeFactor }
+      }),
+    )
+  }
 
   // 5. Compute changes vs prior quarter
   const priorHoldings = await getPriorQuarterHoldings(cik, quarter)
