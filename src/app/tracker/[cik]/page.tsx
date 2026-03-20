@@ -14,6 +14,14 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChangeBadge } from '@/components/ChangeBadge'
+import { InfoTooltip } from '@/components/InfoTooltip'
+
+const GLOSSARY = {
+  cusip: 'CUSIP (Committee on Uniform Security Identification Procedures) — A 9-character unique identifier for each security.',
+  from: 'Prior quarter (the starting point of comparison).',
+  to: 'Current quarter (the end point of comparison).',
+  change: 'Quarter-over-quarter change: ▲ = increased >1%, ▼ = decreased >1%, ★ = new, ✕ = exited.',
+}
 
 interface DiffEntry {
   cusip: string
@@ -117,10 +125,18 @@ function DiffTable({ entries, title, empty }: { entries: DiffEntry[]; title: str
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
               <th className="px-4 py-2 text-left font-medium text-[var(--muted-foreground)]">Company</th>
-              <th className="px-3 py-2 text-left font-medium text-[var(--muted-foreground)]">CUSIP</th>
-              <th className="px-3 py-2 text-right font-medium text-[var(--muted-foreground)]">From</th>
-              <th className="px-3 py-2 text-right font-medium text-[var(--muted-foreground)]">To</th>
-              <th className="pl-3 pr-4 py-2 text-right font-medium text-[var(--muted-foreground)]">Change</th>
+              <th className="px-3 py-2 text-left font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.from}>From</InfoTooltip>
+              </th>
+              <th className="px-3 py-2 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.to}>To</InfoTooltip>
+              </th>
+              <th className="pl-3 pr-4 py-2 text-right font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.change}>Change</InfoTooltip>
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--border)]">
@@ -165,7 +181,9 @@ function MultiTrendTable({ data }: { data: MultiTrackerData }) {
         <thead>
           <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
             <th className="px-4 py-2.5 text-left font-medium text-[var(--muted-foreground)] sticky left-0 bg-[var(--muted)] z-10">Company</th>
-            <th className="px-3 py-2.5 text-left font-medium text-[var(--muted-foreground)]">CUSIP</th>
+            <th className="px-3 py-2.5 text-left font-medium text-[var(--muted-foreground)]">
+              <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
+            </th>
             {visibleQuarters.map((q) => (
               <th key={q} className="px-3 py-2.5 text-right font-medium text-[var(--muted-foreground)]">{q}</th>
             ))}

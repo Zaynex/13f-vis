@@ -14,6 +14,13 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChangeBadge } from '@/components/ChangeBadge'
+import { InfoTooltip } from '@/components/InfoTooltip'
+
+const GLOSSARY = {
+  cusip: 'CUSIP — A 9-character unique identifier for each security. Used instead of company name because names vary across filers.',
+  heldBy: 'Which of the selected funds hold this security.',
+  totalValue: 'Total market value across all selected funds holding this security.',
+}
 
 interface Institution {
   cik: string
@@ -254,9 +261,15 @@ function ComparePageContent() {
                     <thead>
                       <tr className="border-b border-[var(--border)] bg-[var(--muted)]">
                         <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Company</th>
-                        <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">CUSIP</th>
-                        <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">Held by</th>
-                        <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">Total value</th>
+                        <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
+                          <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
+                        </th>
+                        <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
+                          <InfoTooltip term={GLOSSARY.heldBy}>Held by</InfoTooltip>
+                        </th>
+                        <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                          <InfoTooltip term={GLOSSARY.totalValue}>Total value</InfoTooltip>
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]">
