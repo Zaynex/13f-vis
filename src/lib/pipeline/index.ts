@@ -114,16 +114,17 @@ export async function runPipeline(
       cumulativeFactor: 1.0,
     }))
   } else {
-    splitAdjustedHoldings = await Promise.all(
-      rawHoldings.map(async (h) => {
-        const { adjustedShares, cumulativeFactor } = await getSplitAdjustedShares(
-          h.cusip,
-          h.shares,
-          filingDate,
-        )
-        return { ...h, adjustedShares, cumulativeFactor }
-      }),
-    )
+    // Process sequentially to respect the Polygon.io rate limit (5 req/min = 12s between calls).
+    // Each CUSIP result is cached after first lookup, so subsequent quarters are instant.
+    splitAdjustedHoldings = []
+    for (const h of rawHoldings) {
+      const { adjustedShares, cumulativeFactor } = await getSplitAdjustedShares(
+        h.cusip,
+        h.shares,
+        filingDate,
+      )
+      splitAdjustedHoldings.push({ ...h, adjustedShares, cumulativeFactor })
+    }
   }
 
   // 5. Compute changes vs prior quarter

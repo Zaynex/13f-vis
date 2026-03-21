@@ -1,6 +1,6 @@
 {
   "name": "sec-13f-visualizer",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -11,7 +11,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "pipeline:run": "tsx src/lib/pipeline/run.ts",
+    "pipeline:run": "node --env-file=.env.local node_modules/.bin/tsx src/lib/pipeline/run.ts",
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
     "test:api": "vitest run tests/api",
