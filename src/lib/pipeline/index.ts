@@ -86,9 +86,11 @@ export async function runPipeline(
   )
 
   // 2. Fetch raw filing content (rate-limited + retry)
-  const { content } = await rateLimiter.run(() =>
+  // Build the .txt fallback URL in case the XML holdings URL is unavailable (503/404)
+  const txtFallbackUrl = `${SEC_EDGAR_BASE}/Archives/edgar/data/${meta.cikInUrl}/${meta.accessionNumber.replace(/-/g, '')}/${meta.accessionNumber}.txt`
+  let { content } = await rateLimiter.run(() =>
     withRetry(
-      () => fetchFilingContent(meta.filingUrl),
+      () => fetchFilingContent(meta.filingUrl, txtFallbackUrl),
       {
         isRetryable: (e) =>
           e.message.includes('429') ||
@@ -99,7 +101,25 @@ export async function runPipeline(
   )
 
   // 3. Parse into normalized holdings
-  const rawHoldings = await parse13FFiling(content, meta.filingUrl)
+  let rawHoldings = await parse13FFiling(content, meta.filingUrl)
+
+  // If .txt was fetched but no holdings parsed, the holdings may be in a separate
+  // infotable.xml referenced by the .txt. Try fetching infotable.xml directly.
+  if (rawHoldings.length === 0 && content.includes('INFORMATION TABLE')) {
+    const infotableMatch = content.match(/<FILENAME>([^<]+)<\/FILENAME>/i)
+    if (infotableMatch) {
+      const baseUrl = txtFallbackUrl.replace(/\/[^\/]+\.txt$/, '')
+      const infotableUrl = `${baseUrl}/${infotableMatch[1].trim()}`
+      const infotableResp = await fetch(infotableUrl, {
+        headers: { ...EDGAR_HEADERS, 'Accept': 'text/html, application/xml, text/plain' },
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (infotableResp.ok) {
+        content = await infotableResp.text()
+        rawHoldings = await parse13FFiling(content, infotableUrl)
+      }
+    }
+  }
 
   // 4. Apply split adjustments (or skip if flag set)
   // Use meta.filedAt (SEC filing date), NOT the HTTP Date header from fetchFilingContent
@@ -196,6 +216,10 @@ interface FilingMeta {
   filedAt: string
   /** Quarter derived from periodOfReport — the authoritative quarter for this filing */
   correctQuarter: string
+  /** accessionNumber with dashes — used to build the .txt fallback URL */
+  accessionNumber: string
+  /** CIK as integer string (e.g. "1600319") — used to build the .txt fallback URL */
+  cikInUrl: string
 }
 
 async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta> {
@@ -323,13 +347,53 @@ async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta
   // reporting period (e.g. Q4-2025 filing dated 2026-02-17 has periodOfReport 2025-12-31).
   const correctQuarter = await fetchPeriodOfReportQuarter(coverPageUrl, selectedFiling.accessionNumber)
 
-  // Guard: if periodOfReport quarter doesn't match the target quarter, something went wrong.
-  // This should not happen with the 13F-HR filter above, but validate as a safety net.
-  if (correctQuarter !== quarter) {
+  // Guard: if periodOfReport quarter doesn't match the target quarter, verify the filing date
+  // falls within the target quarter's window before throwing.
+  // This handles cases where periodOfReport extraction fails (e.g. XSL cover pages) and
+  // the fallback quarter derivation might be wrong, but the filing date confirms correctness.
+  if (correctQuarter !== quarter && correctQuarter !== 'UNKNOWN') {
+    // Check if filing date falls in the target quarter's window (Q1: Jan-Apr, Q2: Apr-Aug, Q3: Jul-Nov, Q4: Oct-Feb)
+    const filingDateStr = selectedFiling.filingDate
+    if (filingDateStr >= quarterStart.toISOString().split('T')[0] && filingDateStr <= dueDate.toISOString().split('T')[0]) {
+      // Filing date confirms this is the right filing — periodOfReport extraction likely failed
+      // but the filing date is within the correct window. Use the target quarter.
+      return {
+        filingUrl: holdingsUrl,
+        filedAt: selectedFiling.filingDate,
+        correctQuarter: quarter,
+        accessionNumber: selectedFiling.accessionNumber,
+        cikInUrl,
+      }
+    }
+    // Filing date is outside the target window — this is a real mismatch
     throw new Error(
       `Filing mismatch: selected filing ${selectedFiling.accessionNumber} ` +
         `has periodOfReport=${correctQuarter} but target quarter is ${quarter}. ` +
-        `Review the SEC EDGAR data for CIK ${cik}.`,
+        `Filing date ${filingDateStr} is outside the ${quarter} window ` +
+        `[${quarterStart.toISOString().split('T')[0]}, ${dueDate.toISOString().split('T')[0]}].`,
+    )
+  }
+
+  // If correctQuarter is UNKNOWN (periodOfReport extraction failed), use filing date to confirm
+  if (correctQuarter === 'UNKNOWN') {
+    // Verify the filing date is within the target quarter's window
+    const filingDateStr = selectedFiling.filingDate
+    if (filingDateStr >= quarterStart.toISOString().split('T')[0] && filingDateStr <= dueDate.toISOString().split('T')[0]) {
+      // Filing date confirms this is the right filing
+      return {
+        filingUrl: holdingsUrl,
+        filedAt: selectedFiling.filingDate,
+        correctQuarter: quarter,
+        accessionNumber: selectedFiling.accessionNumber,
+        cikInUrl,
+      }
+    }
+    // Filing date is outside target window — real mismatch
+    throw new Error(
+      `Filing mismatch: could not determine periodOfReport for filing ${selectedFiling.accessionNumber} ` +
+        `(filing date: ${filingDateStr}, target quarter: ${quarter}). ` +
+        `Filing date is outside the ${quarter} window ` +
+        `[${quarterStart.toISOString().split('T')[0]}, ${dueDate.toISOString().split('T')[0]}].`,
     )
   }
 
@@ -337,6 +401,8 @@ async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta
     filingUrl: holdingsUrl,
     filedAt: selectedFiling.filingDate,
     correctQuarter,
+    accessionNumber: selectedFiling.accessionNumber,
+    cikInUrl,
   }
 }
 
@@ -498,7 +564,7 @@ function _dateToQuarter(dateStr: string): string {
 
 // ─── Step 2: Fetch Filing Content ───────────────────────────────────────────
 
-async function fetchFilingContent(filingUrl: string): Promise<{ content: string; filedAt: string }> {
+async function fetchFilingContent(filingUrl: string, txtFallbackUrl?: string): Promise<{ content: string; filedAt: string }> {
   const response = await fetch(filingUrl, {
     headers: { ...EDGAR_HEADERS, 'Accept': 'text/html, application/xml, text/plain' },
     signal: AbortSignal.timeout(60_000),
@@ -508,8 +574,20 @@ async function fetchFilingContent(filingUrl: string): Promise<{ content: string;
     throw new RateLimitError(60_000, { filingUrl })
   }
 
-  if (response.status === 404) {
-    throw new NotFoundError(`Filing not found: ${filingUrl}`)
+  // If holdings URL is unavailable (503/404), try the .txt document as fallback.
+  // The .txt always contains the full filing including holdings data.
+  if ((response.status === 404 || response.status === 503) && txtFallbackUrl) {
+    const fallbackResponse = await fetch(txtFallbackUrl, {
+      headers: { ...EDGAR_HEADERS, 'Accept': 'text/html, application/xml, text/plain' },
+      signal: AbortSignal.timeout(60_000),
+    })
+    if (fallbackResponse.ok) {
+      const content = await fallbackResponse.text()
+      const filedAt = fallbackResponse.headers.get('Date') ?? new Date().toISOString()
+      return { content, filedAt }
+    }
+    // Fallback also failed — throw the original error
+    throw new NotFoundError(`Filing not found: ${filingUrl} (fallback also failed: ${txtFallbackUrl})`)
   }
 
   if (!response.ok) {
