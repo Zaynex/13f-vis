@@ -12,15 +12,17 @@ SEC 13F filings arrive in three formats. The `detectFormat()` function in `src/l
 |--------|-----------|--------|
 | XML | ~40% | `xml-parser.ts` |
 | HTML (XSL-transformed) | ~50% | `html-parser.ts` |
-| Plain text | ~10% | Not yet implemented |
+| Plain text (inline XML) | ~10% | `xml-parser.ts` (extracts last `<XML>` block) |
 
-Detection logic:
+Detection logic (`src/lib/parser/detect.ts`):
 ```typescript
-// XML: starts with declaration, <informationTable>, or has xmlns= namespace
-if (sample.startsWith('<?xml') || sample.startsWith('<informationTable') || sample.includes('xmlns="http://www.sec.gov')) return 'xml'
 // HTML: starts with DOCTYPE or <html>
 if (sample.startsWith('<!DOCTYPE') || sample.startsWith('<HTML') || sample.startsWith('<html')) return 'html'
-// Default: text
+// XML: starts with declaration, edgarSubmission, informationTable, or has SEC namespace
+if (sample.startsWith('<?xml') || sample.startsWith('<edgarSubmission') || sample.startsWith('<informationTable') || sample.includes('xmlns="http://www.sec.gov')) return 'xml'
+// .txt files wrapped in SGML (<SEC-DOCUMENT>) with embedded <XML> blocks — routed to text handler
+if (content.startsWith('<SEC-DOCUMENT>') && content.includes('<XML>')) return 'text'
+// Default: columnar plain text
 return 'text'
 ```
 
