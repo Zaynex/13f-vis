@@ -661,12 +661,16 @@ export async function getAvailableQuarters(cik: string): Promise<string[]> {
 
   for (let i = 0; i < count; i++) {
     const form = String(recent.form[i] ?? '').toUpperCase()
-    if (!form.includes('13F')) continue
+    // Only include 13F-HR (holdings) — exclude 13F-NT (Notice, no holdings)
+    if (!form.includes('13F-HR')) continue
 
-    const filingDate = String(recent.filingDate[i] ?? '')
-    if (!filingDate) continue
+    // Use reportDate (periodOfReport) — the authoritative quarter-end date.
+    // filingDate can be 45+ days after quarter-end (e.g., Nov filing for Q3),
+    // causing the wrong quarter to be associated with the filing.
+    const reportDate = String(recent.reportDate[i] ?? '')
+    if (!reportDate) continue
 
-    const quarter = filingDateToQuarter(filingDate)
+    const quarter = filingDateToQuarter(reportDate)
     if (quarter) {
       quarters.add(quarter)
     }
