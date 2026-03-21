@@ -25,7 +25,9 @@ export function detectFormat(content: string): FilingFormat {
     sample.startsWith('<?xml') ||
     sample.startsWith('<edgarSubmission') ||
     sample.startsWith('<informationTable') ||
-    sample.includes('xmlns="http://www.sec.gov')
+    sample.includes('xmlns="http://www.sec.gov') ||
+    // .txt files can contain inline XML (SEC-DOCUMENT wrapper with embedded XML)
+    sample.includes('xmlns:ns1="http://www.sec.gov/edgar/document/thirteenf/informationtable')
   ) {
     return 'xml'
   }
