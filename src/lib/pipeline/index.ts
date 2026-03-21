@@ -101,24 +101,46 @@ export async function runPipeline(
   )
 
   // 3. Parse into normalized holdings
-  let rawHoldings = await parse13FFiling(content, meta.filingUrl)
-
-  // If .txt was fetched but no holdings parsed, the holdings may be in a separate
-  // infotable.xml referenced by the .txt. Try fetching infotable.xml directly.
-  if (rawHoldings.length === 0 && content.includes('INFORMATION TABLE')) {
-    const infotableMatch = content.match(/<FILENAME>([^<]+)<\/FILENAME>/i)
-    if (infotableMatch) {
-      const baseUrl = txtFallbackUrl.replace(/\/[^\/]+\.txt$/, '')
-      const infotableUrl = `${baseUrl}/${infotableMatch[1].trim()}`
-      const infotableResp = await fetch(infotableUrl, {
-        headers: { ...EDGAR_HEADERS, 'Accept': 'text/html, application/xml, text/plain' },
-        signal: AbortSignal.timeout(60_000),
-      })
-      if (infotableResp.ok) {
-        content = await infotableResp.text()
-        rawHoldings = await parse13FFiling(content, infotableUrl)
+  // If parsing fails and the .txt file has an INFORMATION TABLE section,
+  // the holdings may be in a separate infotable.xml or in the last <XML> block
+  // of the .txt itself. Try both approaches.
+  let rawHoldings: Awaited<ReturnType<typeof parse13FFiling>> = []
+  try {
+    rawHoldings = await parse13FFiling(content, meta.filingUrl)
+  } catch (initialParseError) {
+    if (content.includes('INFORMATION TABLE')) {
+      // Try fetching the infotable.xml referenced in the .txt
+      const infotableMatch = content.match(/<FILENAME>([^<]+)<\/FILENAME>/i)
+      if (infotableMatch) {
+        const baseUrl = txtFallbackUrl.replace(/\/[^\/]+\.txt$/, '')
+        const infotableUrl = `${baseUrl}/${infotableMatch[1].trim()}`
+        const infotableResp = await fetch(infotableUrl, {
+          headers: { ...EDGAR_HEADERS, 'Accept': 'text/html, application/xml, text/plain' },
+          signal: AbortSignal.timeout(60_000),
+        })
+        if (infotableResp.ok) {
+          const infotableContent = await infotableResp.text()
+          // Only parse if it looks like real XML (not an SEC error page)
+          if (infotableContent.includes('xmlns') || infotableContent.startsWith('<?xml')) {
+            rawHoldings = await parse13FFiling(infotableContent, infotableUrl)
+          }
+        }
+      }
+      // If still no holdings, try extracting the last <XML> block from the .txt itself
+      // (.txt files with inline XML have holdings in the second <XML> block)
+      if (rawHoldings.length === 0) {
+        const lastXmlMatch = content.match(/<XML>([\s\S]*?)<\/XML>/gi)
+        if (lastXmlMatch) {
+          const lastXmlBlock = lastXmlMatch[lastXmlMatch.length - 1]
+          try {
+            rawHoldings = await parse13FFiling(lastXmlBlock, meta.filingUrl)
+          } catch {
+            // Last XML block also failed — throw original error
+          }
+        }
       }
     }
+    if (rawHoldings.length === 0) throw initialParseError
   }
 
   // 4. Apply split adjustments (or skip if flag set)
@@ -330,9 +352,10 @@ async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta
 
   // Build the EDGAR filing URL
   // Format: https://www.sec.gov/Archives/edgar/data/<CIK>/<accession>/<document>
-  // CIK in URL is NOT zero-padded (SEC normalizes it)
-  // Accession in directory is WITHOUT dashes; in filename it HAS dashes
-  const cikInUrl = parseInt(paddedCik, 10).toString()
+  // NOTE: CIK in URL MUST be zero-padded (10 digits) for .txt file URLs.
+  // The submissions API returns CIK without leading zeros, but the Archives
+  // directory structure uses zero-padded CIK (e.g. 0001600319 not 1600319).
+  const cikInUrl = paddedCik
   const accessionNormalized = selectedFiling.accessionNumber.replace(/-/g, '')
   const accessionFilename = selectedFiling.accessionNumber // keep dashes for filename
 
@@ -576,7 +599,14 @@ async function fetchFilingContent(filingUrl: string, txtFallbackUrl?: string): P
 
   // If holdings URL is unavailable (503/404), try the .txt document as fallback.
   // The .txt always contains the full filing including holdings data.
-  if ((response.status === 404 || response.status === 503) && txtFallbackUrl) {
+  // Also handle the case where SEC returns HTTP 200 with an HTML "File Unavailable" page
+  // (e.g. content-type is text/xml but content is HTML error page).
+  const firstContent = await response.text()
+  const isSecErrorPage =
+    firstContent.includes('SEC.gov | File Unavailable') ||
+    firstContent.includes('<title>SEC.gov |') ||
+    firstContent.includes('We are currently unable to display')
+  if ((response.status === 404 || response.status === 503 || isSecErrorPage) && txtFallbackUrl) {
     const fallbackResponse = await fetch(txtFallbackUrl, {
       headers: { ...EDGAR_HEADERS, 'Accept': 'text/html, application/xml, text/plain' },
       signal: AbortSignal.timeout(60_000),
@@ -594,10 +624,9 @@ async function fetchFilingContent(filingUrl: string, txtFallbackUrl?: string): P
     throw new FetchError(`Failed to fetch filing: ${response.status}`, { filingUrl })
   }
 
-  const content = await response.text()
   const filedAt = response.headers.get('Date') ?? new Date().toISOString()
 
-  return { content, filedAt }
+  return { content: firstContent, filedAt }
 }
 
 // ─── Step 5: Get Prior Quarter Holdings ────────────────────────────────────
@@ -661,12 +690,16 @@ export async function getAvailableQuarters(cik: string): Promise<string[]> {
 
   for (let i = 0; i < count; i++) {
     const form = String(recent.form[i] ?? '').toUpperCase()
-    if (!form.includes('13F')) continue
+    // Only include 13F-HR (holdings) — exclude 13F-NT (Notice, no holdings)
+    if (!form.includes('13F-HR')) continue
 
-    const filingDate = String(recent.filingDate[i] ?? '')
-    if (!filingDate) continue
+    // Use reportDate (periodOfReport) — the authoritative quarter-end date.
+    // filingDate can be 45+ days after quarter-end (e.g., Nov filing for Q3),
+    // causing the wrong quarter to be associated with the filing.
+    const reportDate = String(recent.reportDate[i] ?? '')
+    if (!reportDate) continue
 
-    const quarter = filingDateToQuarter(filingDate)
+    const quarter = filingDateToQuarter(reportDate)
     if (quarter) {
       quarters.add(quarter)
     }

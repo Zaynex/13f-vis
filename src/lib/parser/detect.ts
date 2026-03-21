@@ -25,11 +25,16 @@ export function detectFormat(content: string): FilingFormat {
     sample.startsWith('<?xml') ||
     sample.startsWith('<edgarSubmission') ||
     sample.startsWith('<informationTable') ||
-    sample.includes('xmlns="http://www.sec.gov') ||
-    // .txt files can contain inline XML (SEC-DOCUMENT wrapper with embedded XML)
-    sample.includes('xmlns:ns1="http://www.sec.gov/edgar/document/thirteenf/informationtable')
+    sample.includes('xmlns="http://www.sec.gov')
   ) {
     return 'xml'
+  }
+
+  // .txt files with inline XML start with <SEC-DOCUMENT> (SGML wrapper).
+  // xml2js cannot parse SGML, so we route these to 'text' and handle them
+  // specially in the pipeline (extract the last <XML> block before parsing).
+  if (content.startsWith('<SEC-DOCUMENT>') && content.includes('<XML>')) {
+    return 'text'
   }
 
   // Default to text (columnar plain text)

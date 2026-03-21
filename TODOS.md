@@ -59,3 +59,14 @@ Holdings are matched by CUSIP (unique security identifier) rather than company n
 
 ### Filing Latency
 13F filings are submitted 45 days after quarter end. Data shown is always historical. The UI communicates the filing date prominently to set correct expectations.
+
+### changeType Is Pre-Computed at Pipeline Write Time
+`changeType` (NEW/EXITED/INCREASED/DECREASED/UNCHANGED) is computed and stored when the pipeline runs, not recomputed at query time. This is a performance optimization but creates a data dependency: if a prior quarter is corrected after a later quarter's data is already stored, the later quarter's `changeType` becomes stale.
+
+**Workaround:** After correcting a prior quarter's data, re-run all subsequent quarters through the pipeline to recompute their `changeType`.
+
+**Proper fix (deferred):** Compute `changeType` dynamically at query time in `/api/institutions/[cik]/holdings` (matching how `/api/tracker/[cik]` already does). The tracker API is the source of truth for change computation; the holdings page API uses cached values.
+
+**Why deferred:** Dynamic computation at query time would require joining all N quarters' holdings for large portfolios, which has O(n²) CUSIP matching cost. At 100+ quarters × 1000+ holdings, this becomes slow. A materialized view or computed-column approach would solve this, but adds significant complexity.
+
+**Context:** This caused Bridgewater Q4 2024 to show all 129 holdings as NEW after Q3 2024 data was fixed, because Q4 was stored before Q3 existed. Re-running Q4 fixed it.
