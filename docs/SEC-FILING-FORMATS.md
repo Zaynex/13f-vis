@@ -179,6 +179,8 @@ https://www.sec.gov/Archives/edgar/data/<CIK>/<accession-normalized>/<accession-
 
 **Important:** `xslForm13F_X02/infotable.xml` is HTML (XSL-transformed), not XML. The non-XSL `infotable.xml` at the same level is raw XML.
 
+**When holdings XML URLs return 503/404:** The pipeline fetches the `.txt` document as fallback (the full filing text which always contains holdings data). If no holdings are parsed from the `.txt` content (because the holdings are in a separate file), the pipeline extracts the `infotable.xml` URL referenced in the `.txt` and fetches it directly.
+
 **Case sensitivity:** SEC URLs may use `.XML` (uppercase). The scraper regex must use the `/i` flag to match both `.xml` and `.XML`.
 
 ### Scraping the Index Page
@@ -250,7 +252,9 @@ Not all institutions file the same form types:
 - **Bridgewater** files `13F-HR` — full holdings report
 - **Berkshire Hathaway** files `13F-HR` — full holdings report
 
-The pipeline's `fetchFilingMeta()` filters for forms containing `13F` and selects the most recent within the quarter's due-date window.
+The pipeline's `fetchFilingMeta()` filters for forms containing `13F` but **excludes `13F-HR/A` amendments** (amendments report on prior quarters and must not be selected as the primary filing for a target quarter). It then selects the most recent within the quarter's due-date window.
+
+The `periodOfReport` field from the cover page is the authoritative quarter identifier — the filing date can fall in a different calendar quarter (e.g., a Q4-2025 filing dated 2026-02-17).
 
 ---
 
