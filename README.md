@@ -48,7 +48,7 @@ React Frontend (holdings dashboard + quarter selector + comparison view + tracke
 ## Key Design Decisions
 
 - **CUSIP as primary join key**: Company names vary across filers. CUSIP is authoritative.
-- **Split-adjusted shares**: 13F reports raw shares; Yahoo Finance stock split data is used to compute split-adjusted counts for accurate QoQ comparison.
+- **Split-adjusted shares**: 13F reports raw shares; Polygon.io (primary) + Yahoo Finance (fallback) stock split data is used to compute split-adjusted counts for accurate QoQ comparison.
 - **Multi-format parser**: EDGAR filings arrive in XML (~40%), HTML (~50%), and text (~10%). The parser handles all three via chain of responsibility.
 - **Zod at every external boundary**: All SEC and Yahoo Finance data is validated before touching the DB.
 
