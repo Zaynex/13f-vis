@@ -128,7 +128,8 @@ export async function runPipeline(
   }
 
   // 5. Compute changes vs prior quarter
-  const priorHoldings = await getPriorQuarterHoldings(cik, quarter)
+  // Use correctQuarter for prior quarter lookup (not the input quarter parameter)
+  const priorHoldings = await getPriorQuarterHoldings(cik, meta.correctQuarter)
   const priorByCusip = new Map(priorHoldings.map((h) => [h.cusip, h.adjustedShares]))
 
   // Aggregate by CUSIP: sum adjustedShares across all sub-advisor entries in the same filing.
@@ -173,13 +174,15 @@ export async function runPipeline(
   })
 
   // 6. Upsert to DB (or skip if dry-run)
+  // Use correctQuarter — the authoritative quarter derived from periodOfReport,
+  // NOT the input quarter parameter which may have been wrong.
   if (!options?.skipUpsert) {
-    await upsertFilingAndHoldings(cik, quarter, meta.filingUrl, meta.filedAt, enrichedHoldings)
+    await upsertFilingAndHoldings(cik, meta.correctQuarter, meta.filingUrl, meta.filedAt, enrichedHoldings)
   }
 
   return {
     cik,
-    quarter,
+    quarter: meta.correctQuarter,
     holdingsProcessed: enrichedHoldings.length,
     filingUrl: meta.filingUrl,
     filedAt: new Date(meta.filedAt),
@@ -191,6 +194,8 @@ export async function runPipeline(
 interface FilingMeta {
   filingUrl: string
   filedAt: string
+  /** Quarter derived from periodOfReport — the authoritative quarter for this filing */
+  correctQuarter: string
 }
 
 async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta> {
@@ -306,72 +311,162 @@ async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta
   // The actual holdings (INFOTABLE) are in a separate document, typically named "50240.xml"
   // or similar. We need to fetch the INDEX page to find the correct document.
   const indexUrl = `${SEC_EDGAR_BASE}/Archives/edgar/data/${cikInUrl}/${accessionNormalized}/${accessionFilename}-index.htm`
-  const holdingsUrl = await findInformationTableUrl(indexUrl)
+  const { holdingsUrl, coverPageUrl } = await findFilingDocumentUrls(indexUrl, accessionNormalized, cikInUrl)
+
+  // Extract periodOfReport from cover page to determine the correct quarter.
+  // This is critical because filingDate can fall in a different calendar quarter than the
+  // reporting period (e.g. Q4-2025 filing dated 2026-02-17 has periodOfReport 2025-12-31).
+  const correctQuarter = await fetchPeriodOfReportQuarter(coverPageUrl, selectedFiling.accessionNumber)
 
   return {
-    filingUrl: holdingsUrl ?? `${SEC_EDGAR_BASE}/Archives/edgar/data/${cikInUrl}/${accessionNormalized}/50240.xml`,
+    filingUrl: holdingsUrl,
     filedAt: selectedFiling.filingDate,
+    correctQuarter,
   }
 }
 
-// ─── Helper: Find information table URL from index page ─────────────────────
+// ─── Helper: Find information table URL and cover page URL from index page ───
 
-async function findInformationTableUrl(indexUrl: string): Promise<string | null> {
+async function findFilingDocumentUrls(
+  indexUrl: string,
+  accessionNormalized: string,
+  cikInUrl: string,
+): Promise<{ holdingsUrl: string; coverPageUrl: string }> {
+  const fallbackHoldings = `${SEC_EDGAR_BASE}/Archives/edgar/data/${cikInUrl}/${accessionNormalized}/50240.xml`
+
   try {
     const response = await fetch(indexUrl, {
       headers: EDGAR_HEADERS,
       signal: AbortSignal.timeout(15_000),
     })
-    if (!response.ok) return null
+    if (!response.ok) return { holdingsUrl: fallbackHoldings, coverPageUrl: indexUrl }
 
     const html = await response.text()
 
+    // Extract primaryDocument (cover page) from the index page
+    // The cover page contains periodOfReport
+    let coverPageUrl: string | null = null
+    const primaryDocMatch = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*?)["']/gi)]
+    for (const match of primaryDocMatch) {
+      const url = match[1]
+      const filename = url.split('/').pop() ?? ''
+      // Skip non-document links
+      if (url.includes('xslForm') || url.includes('index') || url.includes('bootstrap')) continue
+      // Prefer the cover page (usually primary_doc.xml or similar)
+      if (filename === 'primary_doc.xml' || filename.includes('cover')) {
+        coverPageUrl = url.startsWith('http') ? url : `${SEC_EDGAR_BASE}${url}`
+        break
+      }
+    }
+
     // Look for 50240.xml or similar information table documents
-    // Pattern: /Archives/edgar/data/<cik>/<acc>/<number>.xml where number is not the accession
-    // Use [^"]* (not [^"]+) to avoid greedy matching across HTML tags
+    let holdingsUrl: string | null = null
     const matches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*50240\.xml)"/gi)]
     if (matches.length > 0) {
       const path = matches[0][1]
-      // Convert relative path to absolute URL
-      return path.startsWith('http') ? path : `${SEC_EDGAR_BASE}${path}`
+      holdingsUrl = path.startsWith('http') ? path : `${SEC_EDGAR_BASE}${path}`
     }
 
-    // Also try: look for infotable.xml or similar
-    // Prefer the NON-XSL version (raw XML) over xslForm13F_X02/ (which is HTML)
-    const infoMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*infotable\.xml)"/gi)]
-    // Find non-XSL version first
-    for (const match of infoMatches) {
-      const path = match[1]
-      if (!path.includes('-index') && !path.includes('xslForm')) {
-        return path.startsWith('http') ? path : `${SEC_EDGAR_BASE}${path}`
-      }
-    }
-    // Fallback: XSL version (will be HTML, but parseable)
-    for (const match of infoMatches) {
-      const path = match[1]
-      if (!path.includes('-index')) {
-        return path.startsWith('http') ? path : `${SEC_EDGAR_BASE}${path}`
+    if (!holdingsUrl) {
+      // Also try: look for infotable.xml or similar
+      const infoMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*infotable\.xml)"/gi)]
+      for (const match of infoMatches) {
+        const path = match[1]
+        if (!path.includes('-index') && !path.includes('xslForm')) {
+          holdingsUrl = path.startsWith('http') ? path : `${SEC_EDGAR_BASE}${path}`
+          break
+        }
       }
     }
 
-    // Last resort: any .xml that's NOT primary_doc and NOT accession-numbered
-    // Use [^"]* (not [^"]+) to avoid greedy matching across HTML tags
-    // Use /i flag to match .XML (uppercase) as well as .xml
-    const xmlMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*\.xml)"/gi)]
-    for (const match of xmlMatches) {
-      const url = match[1]
-      // Skip primary_doc (cover page) and accession-numbered files
-      if (url.includes('primary_doc') || url.includes('-index')) continue
-      // Skip if it looks like an accession-numbered file (contains two number segments)
-      const filename = url.split('/').pop() ?? ''
-      if (/^\d{10,}\.xml$/.test(filename)) continue
-      return url.startsWith('http') ? url : `${SEC_EDGAR_BASE}${url}`
+    if (!holdingsUrl) {
+      // Last resort: any .xml that's NOT primary_doc and NOT accession-numbered
+      const xmlMatches = [...html.matchAll(/href="(\/Archives\/edgar\/data\/[^"]*\.xml)"/gi)]
+      for (const match of xmlMatches) {
+        const url = match[1]
+        const filename = url.split('/').pop() ?? ''
+        if (url.includes('primary_doc') || url.includes('-index')) continue
+        if (/^\d{10,}\.xml$/.test(filename)) continue
+        holdingsUrl = url.startsWith('http') ? url : `${SEC_EDGAR_BASE}${url}`
+        break
+      }
     }
 
-    return null
+    return {
+      holdingsUrl: holdingsUrl ?? fallbackHoldings,
+      coverPageUrl: coverPageUrl ?? indexUrl,
+    }
   } catch {
-    return null
+    return { holdingsUrl: fallbackHoldings, coverPageUrl: indexUrl }
   }
+}
+
+// ─── Helper: Extract periodOfReport from cover page and derive quarter ────────
+
+/**
+ * Fetches the cover page XML and extracts periodOfReport to derive the correct quarter.
+ * periodOfReport is the authoritative field for determining which quarter a 13F filing covers.
+ * The filingDate can be misleading (e.g. Q4-2025 filing dated 2026-02-17 falls in Q1-2026 by date).
+ */
+async function fetchPeriodOfReportQuarter(coverPageUrl: string, accessionNumber: string): Promise<string> {
+  try {
+    // Try primary_doc.xml first (most common cover page name)
+    const primaryDocUrl = coverPageUrl.includes('primary_doc')
+      ? coverPageUrl
+      : coverPageUrl.replace(/-index\.htm$/, '/primary_doc.xml')
+
+    const response = await fetch(primaryDocUrl, {
+      headers: { ...EDGAR_HEADERS, 'Accept': 'application/xml, text/xml' },
+      signal: AbortSignal.timeout(15_000),
+    })
+
+    if (!response.ok) {
+      // Fallback: use filing date derived quarter
+      return _dateToQuarter(new Date().toISOString())
+    }
+
+    const xml = await response.text()
+
+    // Look for periodOfReport in the XML
+    const periodMatch = [...xml.matchAll(/<periodOfReport>([^<]+)<\/periodOfReport>/gi)]
+    if (periodMatch.length > 0) {
+      const periodStr = periodMatch[0][1].trim()
+      return _dateToQuarter(periodStr)
+    }
+
+    // Try alternate formats
+    const altMatch = [...xml.matchAll(/periodOfReport[^>]*>([^<]{8,12})</gi)]
+    if (altMatch.length > 0) {
+      const periodStr = altMatch[0][1].trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(periodStr)) {
+        return _dateToQuarter(periodStr)
+      }
+    }
+  } catch {
+    // If cover page fetch fails, fall back to deriving from filing date
+  }
+
+  // Fallback: derive from accession number date pattern (e.g. 0001193125-26-054580 → 2026)
+  const yearMatch = accessionNumber.match(/(\d{2})-\d{6}$/)
+  if (yearMatch) {
+    const year = 2000 + parseInt(yearMatch[1], 10)
+    return _dateToQuarter(`${year}-01-01`)
+  }
+
+  return _dateToQuarter(new Date().toISOString())
+}
+
+/**
+ * Internal quarter conversion — always returns a string (or 'UNKNOWN').
+ * Both public wrappers handle null differently.
+ */
+function _dateToQuarter(dateStr: string): string {
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return 'UNKNOWN'
+  const year = parseInt(match[1], 10)
+  const month = parseInt(match[2], 10)
+  const q = Math.ceil(month / 3)
+  return `${year}-Q${q}`
 }
 
 // ─── Step 2: Fetch Filing Content ───────────────────────────────────────────
@@ -478,20 +573,11 @@ export async function getAvailableQuarters(cik: string): Promise<string[]> {
 
 /**
  * Convert a filing date string (YYYY-MM-DD) to a quarter string (YYYY-QN).
+ * Used by getAvailableQuarters — returns null for invalid dates.
  */
 function filingDateToQuarter(dateStr: string): string | null {
-  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!match) return null
-
-  const year = parseInt(match[1], 10)
-  const month = parseInt(match[2], 10)
-
-  // Q1: Jan-Mar (months 01-03) → Q1
-  // Q2: Apr-Jun (months 04-06) → Q2
-  // Q3: Jul-Sep (months 07-09) → Q3
-  // Q4: Oct-Dec (months 10-12) → Q4
-  const q = Math.ceil(month / 3)
-  return `${year}-Q${q}`
+  const result = _dateToQuarter(dateStr)
+  return result === 'UNKNOWN' ? null : result
 }
 
 /**
