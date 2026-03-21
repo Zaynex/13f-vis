@@ -274,8 +274,13 @@ async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta
   // Due dates are 45 days after quarter end, allow 60 days buffer for late filers
   const dueDate = addDays(new Date(`${quarterEnd}T00:00:00`), 60)
 
-  // Filter for 13F filings (forms: 13F, 13F-HR, 13F-HR/A, etc.)
-  const f13fFilings = filings.filter((f) => f.form.toUpperCase().includes('13F'))
+  // Filter for 13F filings (forms: 13F, 13F-HR only — exclude 13F-HR/A amendments).
+  // Amendments report on PRIOR quarters and should never be used as the primary filing
+  // for a target quarter. E.g. a 13F-HR/A filed 2025-08-14 with periodOfReport 2025-03-31
+  // (Q1) must not be selected when looking for Q2 2025 (periodOfReport 2025-06-30).
+  const f13fFilings = filings.filter(
+    (f) => f.form.toUpperCase().includes('13F') && !f.form.toUpperCase().includes('13F-HR/A'),
+  )
 
   // Sort by filing date descending
   const sorted = [...f13fFilings].sort(
@@ -318,6 +323,16 @@ async function fetchFilingMeta(cik: string, quarter: string): Promise<FilingMeta
   // reporting period (e.g. Q4-2025 filing dated 2026-02-17 has periodOfReport 2025-12-31).
   const correctQuarter = await fetchPeriodOfReportQuarter(coverPageUrl, selectedFiling.accessionNumber)
 
+  // Guard: if periodOfReport quarter doesn't match the target quarter, something went wrong.
+  // This should not happen with the 13F-HR filter above, but validate as a safety net.
+  if (correctQuarter !== quarter) {
+    throw new Error(
+      `Filing mismatch: selected filing ${selectedFiling.accessionNumber} ` +
+        `has periodOfReport=${correctQuarter} but target quarter is ${quarter}. ` +
+        `Review the SEC EDGAR data for CIK ${cik}.`,
+    )
+  }
+
   return {
     filingUrl: holdingsUrl,
     filedAt: selectedFiling.filingDate,
@@ -350,10 +365,11 @@ async function findFilingDocumentUrls(
     for (const match of primaryDocMatch) {
       const url = match[1]
       const filename = url.split('/').pop() ?? ''
-      // Skip non-document links
+      // Skip non-document links and XSL-transformed cover pages (they render as HTML, not XML)
       if (url.includes('xslForm') || url.includes('index') || url.includes('bootstrap')) continue
       // Prefer the cover page (usually primary_doc.xml or similar)
-      if (filename === 'primary_doc.xml' || filename.includes('cover')) {
+      // Prefer NON-XSL version — the XSL version renders as HTML and lacks periodOfReport
+      if ((filename === 'primary_doc.xml' && !url.includes('xslForm')) || filename.includes('cover')) {
         coverPageUrl = url.startsWith('http') ? url : `${SEC_EDGAR_BASE}${url}`
         break
       }
@@ -461,12 +477,23 @@ async function fetchPeriodOfReportQuarter(coverPageUrl: string, accessionNumber:
  * Both public wrappers handle null differently.
  */
 function _dateToQuarter(dateStr: string): string {
-  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (!match) return 'UNKNOWN'
-  const year = parseInt(match[1], 10)
-  const month = parseInt(match[2], 10)
-  const q = Math.ceil(month / 3)
-  return `${year}-Q${q}`
+  // Handle YYYY-MM-DD format (e.g. "2025-06-30")
+  const yyyyMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (yyyyMatch) {
+    const year = parseInt(yyyyMatch[1], 10)
+    const month = parseInt(yyyyMatch[2], 10)
+    const q = Math.ceil(month / 3)
+    return `${year}-Q${q}`
+  }
+  // Handle MM-DD-YYYY format (e.g. "06-30-2025" — used in some SEC EDGAR cover pages)
+  const mmddMatch = dateStr.match(/^(\d{2})-(\d{2})-(\d{4})/)
+  if (mmddMatch) {
+    const year = parseInt(mmddMatch[3], 10)
+    const month = parseInt(mmddMatch[1], 10)
+    const q = Math.ceil(month / 3)
+    return `${year}-Q${q}`
+  }
+  return 'UNKNOWN'
 }
 
 // ─── Step 2: Fetch Filing Content ───────────────────────────────────────────
