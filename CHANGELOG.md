@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.4.1] - 2026-03-21
+
+### Fixed
+- **MultiTrendTable trend arrows** — Removed incorrect `.reverse()` call that caused trend arrows to show opposite direction. The API returns values in reverse chronological order (newest first); the old code reversed this, making the delta calculation backwards. Trend arrows now correctly show ↑ when shares increased and ↓ when shares decreased.
+
 ## [0.2.4] - 2026-03-21
 
 ### Added
