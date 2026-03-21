@@ -46,7 +46,7 @@
 ## Known Limitations
 
 ### Stock Split Adjustment
-13F filings report raw share counts. We pull split data from Yahoo Finance to compute split-adjusted counts. If Yahoo Finance is unavailable for a given CUSIP, shares are shown unadjusted with a warning. This is a known limitation and is documented.
+13F filings report raw share counts. We pull split data from Polygon.io (primary, free tier: 5 req/min) with Yahoo Finance as fallback. If both are unavailable for a given CUSIP, shares are shown unadjusted with a warning.
 
 ### CUSIP Matching
 Holdings are matched by CUSIP (unique security identifier) rather than company name, which can vary across filers. CUSIP is always required and is the authoritative identifier.

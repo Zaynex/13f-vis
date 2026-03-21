@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.4] - 2026-03-21
+
+### Added
+- **Polygon.io split adjustment** — Replaced broken Yahoo Finance-only split adjustment with Polygon.io as primary data source. CUSIP→ticker resolution uses Polygon.io's `/v3/reference/tickers?cusip=` endpoint; split data uses `/v3/reference/splits`. Falls back to Yahoo Finance chart API if Polygon.io is unavailable, then to unadjusted shares.
+- **Pipeline env loading** — `pipeline:run` now loads `.env.local` via Node's `--env-file` flag, ensuring `POLYGON_API_KEY` and other secrets are available to the CLI.
+
+### Changed
+- **Sequential split lookups** — Changed from `Promise.all` to sequential `for...of` in the pipeline to respect Polygon.io's free-tier rate limit (5 req/min), preventing 429 errors from burst requests.
+
 ## [0.2.3] - 2026-03-21
 
 ### Fixed
