@@ -5,6 +5,12 @@
 
 ## Completed
 
+### SEC EDGAR Pipeline Robustness
+- **What:** Fixed multiple SEC EDGAR filing edge cases that caused all holdings to show as NEW: 13F-HR/A amendment exclusion, periodOfReport extraction from cover page, MM-DD-YYYY date parsing, SEC EDGAR 503/404 fallback chain, inline XML detection in .txt files, and filing date window validation.
+- **Why:** Without these fixes, Berkshire Hathaway Q2/Q3 2025 and Bridgewater Associates Q1/Q2 2025 all showed as 100% NEW positions.
+- **Where:** `src/lib/pipeline/index.ts` (main fixes), `src/lib/parser/detect.ts` (inline XML detection)
+- **Completed:** 2026-03-21
+
 ### Non-Consecutive Quarter Comparison + Multi-Quarter Trend View
 - **What:** New `/tracker/[cik]` page and `/api/tracker/[cik]` endpoint — compare any two quarters side-by-side with NEW/EXITED/INCREASED/DECREASED/UNCHANGED groupings. Also added Multi-Quarter mode with `?quarters=` param for N-quarter trend table view.
 - **Why:** Core feature request: lets users see 6-month or annual change in one view

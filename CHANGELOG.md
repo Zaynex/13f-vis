@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.4.2] - 2026-03-21
+
+### Fixed
+- **13F-HR/A amendment exclusion** — Amendments (`13F-HR/A`) report on prior quarters and were sometimes selected as the primary filing for a target quarter, causing all holdings to show as NEW. Pipeline now excludes `13F-HR/A` from filing selection.
+- **periodOfReport extraction** — Cover page parsing now extracts `periodOfReport` directly from the XML to determine the correct filing quarter, instead of relying on the filing date which can be in a different calendar quarter.
+- **MM-DD-YYYY date format** — `periodOfReport` values in `MM-DD-YYYY` format (e.g. `06-30-2025`) are now correctly parsed when deriving the filing quarter.
+- **SEC EDGAR 503 fallback** — When holdings XML URLs return 503/404, the pipeline now falls back to the `.txt` document. If no holdings are parsed from the `.txt` content, it extracts the embedded `infotable.xml` reference and fetches it directly.
+- **Inline XML in .txt files** — Format detection now correctly routes `.txt` files containing embedded XML (`ns1:informationTable`) to the XML parser instead of the text parser.
+- **All holdings showing as NEW** — Berkshire Hathaway Q2/Q3 2025 and Bridgewater Associates Q1/Q2 2025 now show correct change types (INCREASED/DECREASED/UNCHANGED) instead of all NEW.
+
+### Changed
+- **Sequential split lookups** — Polygon.io split lookups now run sequentially (instead of `Promise.all`) to respect the free-tier rate limit of 5 req/min, preventing 429 errors during backfill.
+- **Filing date validation** — When `periodOfReport` is unknown or mismatched, the pipeline now validates that the filing date falls within the target quarter's filing window before accepting or rejecting the filing.
+
 ## [0.2.4.1] - 2026-03-21
 
 ### Fixed
