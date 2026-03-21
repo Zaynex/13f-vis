@@ -203,40 +203,35 @@ function MultiTrendTable({ data }: { data: MultiTrackerData }) {
         </thead>
         <tbody className="divide-y divide-[var(--border)]">
           {holdings.map((h) => {
+            // visibleQuarters and h.values are both reverse chronological (newest first).
             const vals = h.values.filter((v) => visibleQuarters.includes(v.quarter))
-            const firstVal = vals[0]
-            const lastVal = vals[vals.length - 1]
 
-            // NEW/EXITED: based on first vs last visible quarter
+            // NEW: oldest visible quarter has no data, newest does
+            // EXITED: newest has no data, oldest does
+            const oldestQ = visibleQuarters[visibleQuarters.length - 1]
+            const newestQ = visibleQuarters[0]
+            const oldestVal = vals[vals.length - 1]
+            const newestVal = vals[0]
+
             let trend: 'up' | 'down' | 'flat' | 'new' | 'exited' | null = null
-            if (firstVal?.adjustedShares === null && lastVal?.adjustedShares !== null) {
+            if (oldestVal?.adjustedShares === null && newestVal?.adjustedShares !== null) {
               trend = 'new'
-            } else if (firstVal?.adjustedShares !== null && lastVal?.adjustedShares === null) {
+            } else if (oldestVal?.adjustedShares !== null && newestVal?.adjustedShares === null) {
               trend = 'exited'
             } else {
-              // Trend: compare the two most recent consecutive non-null quarters
+              // Trend: vals is reverse chronological (newest first).
+              // recentVal = most recent quarter, prevVal = previous quarter.
               let recentVal: typeof vals[0] | null = null
               let prevVal: typeof vals[0] | null = null
 
-              // Find most recent non-null
               for (const v of vals) {
                 if (v.adjustedShares !== null) {
-                  recentVal = v
-                  break
-                }
-              }
-
-              // Find previous non-null (skip the most recent)
-              if (recentVal) {
-                let skipRecent = true
-                for (const v of vals) {
-                  if (v.adjustedShares === null) continue
-                  if (skipRecent) {
-                    skipRecent = false
-                    continue
+                  if (!recentVal) {
+                    recentVal = v
+                  } else if (!prevVal) {
+                    prevVal = v
+                    break
                   }
-                  prevVal = v
-                  break
                 }
               }
 
