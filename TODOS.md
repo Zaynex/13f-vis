@@ -27,7 +27,8 @@
 - **What:** Seed the database with 10 major funds (Berkshire, Bridgewater, Citadel, etc.)
 - **Why:** Need at least 5-10 institutions for the comparison tool to be meaningful
 - **Priority:** P1
-- **Status:** Partially done — 4/10 institutions have holdings loaded (Berkshire Hathaway, Bridgewater, BBH, Susquehanna). Corrected CIKs for Citadel, Two Sigma, Point72, BlackRock (seed data had wrong CIKs). Vanguard files 13F-NT under its US entities; individual Vanguard funds file separately under fund-specific CIKs.
+- **Status:** Done — 9/9 institutions have holdings loaded. Corrected CIKs for Citadel (0001423053), Two Sigma (0001179392), Point72 (HK 0001599822, London 0001698051), BlackRock (0001003283), Susquehanna (0000924808). Berkshire Hathaway (0001067983), Bridgewater (0001600319), Brown Brothers Harriman (0000014661) had correct CIKs. Vanguard files 13F-NT only under its US entity — excluded.
+- **Completed:** 2026-03-22
 
 ## Deferred (post-MVP)
 
@@ -60,13 +61,13 @@ Holdings are matched by CUSIP (unique security identifier) rather than company n
 ### Filing Latency
 13F filings are submitted 45 days after quarter end. Data shown is always historical. The UI communicates the filing date prominently to set correct expectations.
 
-### changeType Is Pre-Computed at Pipeline Write Time
+### changeType Is Pre-Computed at Pipeline Write Time (Mitigated by Tracker API)
 `changeType` (NEW/EXITED/INCREASED/DECREASED/UNCHANGED) is computed and stored when the pipeline runs, not recomputed at query time. This is a performance optimization but creates a data dependency: if a prior quarter is corrected after a later quarter's data is already stored, the later quarter's `changeType` becomes stale.
 
-**Workaround:** After correcting a prior quarter's data, re-run all subsequent quarters through the pipeline to recompute their `changeType`.
+**Mitigation:** `/api/tracker/[cik]` computes `changeType` dynamically at query time using `calculateChangeBadge(toShares, fromShares)`, making it immune to staleness. The tracker page and comparison features use the tracker API. The holdings page API (`/api/institutions/[cik]/holdings`) uses pre-computed cached values.
 
-**Proper fix (deferred):** Compute `changeType` dynamically at query time in `/api/institutions/[cik]/holdings` (matching how `/api/tracker/[cik]` already does). The tracker API is the source of truth for change computation; the holdings page API uses cached values.
+**Workaround:** After correcting a prior quarter's data, re-run all subsequent quarters through the pipeline to recompute their `changeType` for the holdings page.
 
-**Why deferred:** Dynamic computation at query time would require joining all N quarters' holdings for large portfolios, which has O(n²) CUSIP matching cost. At 100+ quarters × 1000+ holdings, this becomes slow. A materialized view or computed-column approach would solve this, but adds significant complexity.
+**Proper fix (deferred):** Compute `changeType` dynamically at query time in `/api/institutions/[cik]/holdings` (matching how `/api/tracker/[cik]` does). This would require materializing all historical holdings per CUSIP, which has O(n²) cost for large portfolios.
 
 **Context:** This caused Bridgewater Q4 2024 to show all 129 holdings as NEW after Q3 2024 data was fixed, because Q4 was stored before Q3 existed. Re-running Q4 fixed it.
