@@ -71,8 +71,13 @@ A professional money management firm (hedge fund, mutual fund, pension fund, etc
 
 **Pre-seeded institutions in this database:**
 - **Berkshire Hathaway** (`0001067983`) — Warren Buffett's company
-- **Bridgewater Associates** (`0001600319`) — Ray Dalio's hedge fund
-- **Brown Brothers Harriman** (`0000014661`) — Oldest US investment bank
+- **Bridgewater Advisors Inc** (`0001600319`) — Ray Dalio's hedge fund
+- **Two Sigma Investments LP** (`0001179392`) — Quantitative hedge fund
+- **Citadel Advisors LLC** (`0001423053`) — Ken Griffin's hedge fund
+- **Point72 Hong Kong Ltd** (`0001599822`) — Steve Cohen's fund (HK entity)
+- **Point72 Europe London LLP** (`0001698051`) — Steve Cohen's fund (London entity)
 - **Susquehanna International Group** (`0001765924`) — Large quantitative hedge fund
+- **Brown Brothers Harriman** (`0000014661`) — Oldest US investment bank
+- **BlackRock Group LTD** (`0001003283`) — World's largest asset manager
 
 **Note:** Some institutions file "13F-NT" instead of full 13F. NT means "Notice" — it indicates they have no holdings to report, or the filing is incomplete. We only show institutions with actual holdings data.

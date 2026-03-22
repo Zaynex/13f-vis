@@ -54,16 +54,18 @@ React Frontend (holdings dashboard + quarter selector + comparison view + tracke
 
 ## Initial Institution Set
 
-Pre-seeded institutions and their correct SEC CIKs:
-- Berkshire Hathaway (`0001067983`) — 42 holdings loaded ✅
-- Bridgewater Associates (`0001600319`) — 448 holdings loaded ✅
-- Brown Brothers Harriman (`0000014661`) — 1833 holdings loaded ✅
-- Susquehanna International Group (`0001765924`) — 107 holdings loaded ✅
-- Citadel Advisors (`0001576996`) — 13F-NT only (no holdings)
-- Two Sigma Investments (`0001569734`) — 13F-NT only (no holdings)
-- Point72 Asset Management (`0002017863`) — 13F-NT only (no holdings)
-- Vanguard Group (`0000947529`) — 13F-NT only (no holdings)
-- BlackRock (Isle of Man) (`0001483438`) — 13F-NT only (no holdings)
+Pre-seeded institutions and their correct SEC CIKs (all verified on SEC EDGAR):
+- Berkshire Hathaway (`0001067983`) — 13F-HR ✅
+- Bridgewater Advisors Inc (`0001600319`) — 13F-HR ✅
+- Two Sigma Investments LP (`0001179392`) — 13F-HR ✅
+- Citadel Advisors LLC (`0001423053`) — 13F-HR ✅
+- Point72 Hong Kong Ltd (`0001599822`) — 13F-HR ✅ (US parent files SC 13G only)
+- Point72 Europe London LLP (`0001698051`) — 13F-HR ✅
+- Susquehanna International Group (`0001765924`) — 13F-HR ✅
+- Brown Brothers Harriman (`0000014661`) — 13F-HR ✅
+- BlackRock Group LTD (`0001003283`) — 13F-HR ✅
+
+> Note: Vanguard and individual Vanguard funds file 13F-NT or under separate fund CIKs. SteelOak Capital and other small funds not listed have CIKs that need individual verification via SEC EDGAR.
 
 > Note: Some seeded CIKs were incorrect. See `docs/SEC-FILING-FORMATS.md` for details on how to verify CIKs via SEC EDGAR.
 

@@ -27,7 +27,7 @@
 - **What:** Seed the database with 10 major funds (Berkshire, Bridgewater, Citadel, etc.)
 - **Why:** Need at least 5-10 institutions for the comparison tool to be meaningful
 - **Priority:** P1
-- **Status:** Partially done — 4/10 institutions have holdings loaded (Berkshire Hathaway, Bridgewater, BBH, Susquehanna). Vanguard, Citadel, Point72, Two Sigma, BlackRock file 13F-NT (no holdings).
+- **Status:** Partially done — 4/10 institutions have holdings loaded (Berkshire Hathaway, Bridgewater, BBH, Susquehanna). Corrected CIKs for Citadel, Two Sigma, Point72, BlackRock (seed data had wrong CIKs). Vanguard files 13F-NT under its US entities; individual Vanguard funds file separately under fund-specific CIKs.
 
 ## Deferred (post-MVP)
 
