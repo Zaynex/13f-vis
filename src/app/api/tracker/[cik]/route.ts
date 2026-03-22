@@ -95,13 +95,7 @@ export async function GET(
             }
           })
 
-          // Company name: first non-null, or 'UNKNOWN'
-          const companyName =
-            values.find((v) => v.adjustedShares !== null)?.adjustedShares !== undefined
-              ? byQuarter.get(quarters.find((q) => byQuarter.get(q)?.has(cusip))!)?.get(cusip)?.companyName ?? 'UNKNOWN'
-              : 'UNKNOWN'
-
-          // For companyName, find first quarter that has this cusip
+          // Company name: first quarter that has this CUSIP
           let firstName = 'UNKNOWN'
           for (const q of quarters) {
             const h = byQuarter.get(q)?.get(cusip)

@@ -1,6 +1,6 @@
 {
   "name": "sec-13f-visualizer",
-  "version": "0.2.4.2",
+  "version": "0.2.5.0",
   "private": true,
   "scripts": {
     "dev": "next dev",

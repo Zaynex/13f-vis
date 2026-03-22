@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.5.0] - 2026-03-22
+
+### Added
+- **Tracker quarter-over-quarter comparison page** (`/tracker/[cik]`) — New dedicated page for comparing any two quarters side-by-side with NEW/EXITED/INCREASED/DECREASED/UNCHANGED groupings. Computes changeType dynamically at query time, immune to stale pre-computed values.
+- **Tracker API** (`/api/tracker/[cik]`) — New API endpoint with two modes: `?from=Q1&to=Q2` for two-quarter comparison, and `?quarters=Q1,Q2,Q3,Q4` for multi-quarter trend view.
+- **Info tooltips on holdings table** — Column headers (CUSIP, Shares, Value, Change) now show glossary tooltips explaining each term.
+- **MSW test infrastructure** — Mock Service Worker setup with handlers for all API endpoints, enabling isolated API integration tests without a running server.
+
+### Fixed
+- **CIK zero-padding bug** — Pipeline CIK URL construction was incorrectly stripping leading zeros, causing ALL non-Berkshire institutions to return zero holdings. Fixed: `cikInUrl = paddedCik` (was `parseInt(paddedCik, 10).toString()`).
+- **Rate limiter + retry** — `fetchFilingMeta` and `fetchFilingContent` now wrap all SEC EDGAR requests with `rateLimiter.run()` + `withRetry()`, handling 429 rate limits and transient failures gracefully.
+
+### Changed
+- **CIK seed data corrections** — Corrected CIKs for Citadel (0001423053), Two Sigma (0001179392), Point72 HK (0001599822), Point72 London (0001698051), BlackRock (0001003283), Susquehanna (0000924808). All 9 institutions now have holdings data loaded.
+- **Seed data refinements** — Susquehanna name typo fixed (`SUSPQUEHANNA` → `SUSQUEHANNA`). Point72 US entity excluded (files SC 13G only, not 13F-HR).
+
 ## [0.2.4.2] - 2026-03-21
 
 ### Fixed
