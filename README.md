@@ -47,6 +47,7 @@ React Frontend (holdings dashboard + quarter selector + comparison view + tracke
 
 ## Key Design Decisions
 
+- **Dynamic query mode**: API endpoints auto-fetch missing quarters from SEC EDGAR on demand — no manual pipeline runs needed for new quarters. Concurrent requests for the same missing quarter share one pipeline run via a Promise deduplication cache, preventing thundering herd.
 - **CUSIP as primary join key**: Company names vary across filers. CUSIP is authoritative.
 - **Split-adjusted shares**: 13F reports raw shares; Polygon.io (primary) + Yahoo Finance (fallback) stock split data is used to compute split-adjusted counts for accurate QoQ comparison.
 - **Multi-format parser**: EDGAR filings arrive in XML (~40%), HTML (~50%), and text (~10%). The parser handles all three via chain of responsibility.
@@ -72,6 +73,8 @@ Pre-seeded institutions and their correct SEC CIKs (all verified on SEC EDGAR):
 ## Detailed Format Reference
 
 For engineers working on the parsing pipeline, see `docs/SEC-FILING-FORMATS.md` — covers all three 13F filing formats (XML variants, HTML table structure, EDGAR URL conventions), common parsing bugs, and real examples from production filings.
+
+For the dynamic query mode design (auto-fetch on missing quarters, Promise deduplication, SEC EDGAR fallback behavior), see `docs/DYNAMIC-FETCH-PLAN.md`.
 
 ## Glossary
 
