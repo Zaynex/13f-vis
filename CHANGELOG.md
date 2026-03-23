@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.2.6.0] - 2026-03-24
+
+### Added
+- **Weight % column on holdings table** — Each position now shows its portfolio weight percentage (value / total portfolio value), making it easy to see concentration at a glance.
+- **Concentration summary panel** — Institution holdings page now shows portfolio total value, position count, top-10 concentration %, and largest position — all computed client-side from existing data.
+
 ## [0.2.5.0] - 2026-03-22
 
 ### Added

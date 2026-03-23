@@ -1,6 +1,6 @@
 // Holdings Table — displays a fund's current quarter positions
 //
-// Columns: Company | CUSIP | Shares | Value | Change
+// Columns: Company | CUSIP | Shares | Value | Weight | Change
 // Sorted by: market value descending (largest positions first)
 //
 // Features:
@@ -26,6 +26,7 @@ export interface HoldingRow {
   companyName: string
   adjustedShares: number
   rawValue: number
+  weightPercent?: number | null
   changeType: ChangeType | 'UNCHANGED'
   changePercent: number | null
 }
@@ -63,6 +64,9 @@ function SkeletonRow() {
       <td className="px-3 py-3 text-right">
         <div className="ml-auto h-4 w-20 animate-pulse rounded bg-[var(--muted)]" />
       </td>
+      <td className="px-3 py-3 text-right">
+        <div className="ml-auto h-4 w-12 animate-pulse rounded bg-[var(--muted)]" />
+      </td>
       <td className="pl-3 pr-4">
         <div className="ml-auto h-5 w-16 animate-pulse rounded bg-[var(--muted)]" />
       </td>
@@ -86,6 +90,9 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
               </th>
               <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.value}>Value</InfoTooltip>
+              </th>
+              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                Weight
               </th>
               <th className="pl-3 pr-4 py-3 text-right font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.change}>Change</InfoTooltip>
@@ -130,6 +137,9 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
               <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.value}>Value</InfoTooltip>
               </th>
+              <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
+                Weight
+              </th>
               <th className="pl-3 pr-4 py-3 text-right font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.change}>Change</InfoTooltip>
               </th>
@@ -151,6 +161,9 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
                 <td className="px-3 py-3 text-right tabular-nums font-medium">
                   {formatValue(h.rawValue)}
                 </td>
+                <td className="px-3 py-3 text-right tabular-nums text-[var(--muted-foreground)]">
+                  {h.weightPercent != null ? `${h.weightPercent.toFixed(1)}%` : '—'}
+                </td>
                 <td className="pl-3 pr-4 py-3 text-right">
                   <ChangeBadge type={h.changeType} percent={h.changePercent} />
                 </td>
@@ -161,7 +174,7 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
       </div>
       <div className="border-t border-[var(--border)] bg-[var(--muted)] px-4 py-2">
         <p className="text-xs text-[var(--muted-foreground)]">
-          {holdings.length} positions · Values in USD · Shares are split-adjusted
+          {holdings.length} positions · Values in USD · Shares are split-adjusted · Weight = % of portfolio
         </p>
       </div>
     </div>
