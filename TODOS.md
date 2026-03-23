@@ -30,6 +30,14 @@
 - **Status:** Done — 9/9 institutions have holdings loaded. Corrected CIKs for Citadel (0001423053), Two Sigma (0001179392), Point72 (HK 0001599822, London 0001698051), BlackRock (0001003283), Susquehanna (0000924808). Berkshire Hathaway (0001067983), Bridgewater (0001600319), Brown Brothers Harriman (0000014661) had correct CIKs. Vanguard files 13F-NT only under its US entity — excluded.
 - **Completed:** 2026-03-22
 
+### Sector Allocation Analysis
+- **What:** Show % of portfolio in Tech, Healthcare, etc., and concentration risk (top 10 = X%)
+- **Why:** High-value for retail investors evaluating fund risk profile
+- **Priority:** P2
+- **Depends on:** Industry/sector classification pipeline (e.g., GICS sector data)
+- **Completed:** 2026-03-24 (v0.2.6.0) — Minimal approach implemented: weight % column on holdings table + top-10 concentration metric + portfolio value + largest position in concentration summary panel. Full sector/industry classification (Tech, Healthcare, etc.) deferred — requires external data enrichment API.
+- **Where:** `src/app/institutions/[cik]/page.tsx`, `src/components/HoldingsTable.tsx`
+
 ## Deferred (post-MVP)
 
 ### Company-to-Institution Search (Reverse Lookup)
@@ -37,12 +45,6 @@
 - **Why:** Useful feature not critical to MVP
 - **Priority:** P3
 - **Depends on:** Sector classification (add industry tags)
-
-### Sector Allocation Analysis
-- **What:** Show % of portfolio in Tech, Healthcare, etc., and concentration risk (top 10 = X%)
-- **Why:** High-value for retail investors evaluating fund risk profile
-- **Priority:** P2
-- **Depends on:** Industry/sector classification pipeline (e.g., GICS sector data)
 
 ### Alert System
 - **What:** Notify when a tracked institution's position changes by >25% QoQ

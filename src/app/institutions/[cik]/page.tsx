@@ -7,7 +7,8 @@
 //
 // Features:
 // - Institution header with CIK and filing date
-// - Holdings table with change badges
+// - Concentration summary (total value, position count, top-10 concentration, largest position)
+// - Holdings table with change badges and weight %
 // - Quarter selector
 // - Link to compare view
 
@@ -22,6 +23,7 @@ interface Holding {
   companyName: string
   adjustedShares: number
   rawValue: number
+  weightPercent?: number | null
   changeType: ChangeType | 'UNCHANGED'
   changePercent: number | null
 }
@@ -44,6 +46,46 @@ function formatDate(dateStr: string): string {
     month: 'short',
     day: 'numeric',
   })
+}
+
+function formatValue(n: number): string {
+  if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  return `$${n.toLocaleString()}`
+}
+
+function ConcentrationSummary({ holdings }: { holdings: Holding[] }) {
+  if (holdings.length === 0) return null
+
+  const totalValue = holdings.reduce((sum, h) => sum + h.rawValue, 0)
+  if (totalValue === 0) return null
+
+  const top10 = holdings.slice(0, 10)
+  const top10Value = top10.reduce((sum, h) => sum + h.rawValue, 0)
+  const top10Percent = (top10Value / totalValue) * 100
+
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+        <p className="text-xs text-[var(--muted-foreground)]">Portfolio value</p>
+        <p className="mt-0.5 text-lg font-semibold">{formatValue(totalValue)}</p>
+      </div>
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+        <p className="text-xs text-[var(--muted-foreground)]">Positions</p>
+        <p className="mt-0.5 text-lg font-semibold">{holdings.length}</p>
+      </div>
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+        <p className="text-xs text-[var(--muted-foreground)]">Top 10 concentration</p>
+        <p className="mt-0.5 text-lg font-semibold">{top10Percent.toFixed(1)}%</p>
+      </div>
+      <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3">
+        <p className="text-xs text-[var(--muted-foreground)]">Largest position</p>
+        <p className="mt-0.5 truncate text-lg font-semibold" title={top10[0]?.companyName}>
+          {top10[0]?.companyName ?? '—'}
+        </p>
+      </div>
+    </div>
+  )
 }
 
 function FilingBanner({ filing, priorQuarter }: { filing: PageData['filing']; priorQuarter: string | null }) {
@@ -117,6 +159,14 @@ export default function InstitutionPage() {
         const res = await fetch(url)
         if (!res.ok) throw new Error('Failed to fetch')
         const json: PageData = await res.json()
+        // Compute weight percent from rawValue (portfolio %)
+        const totalValue = (json.holdings ?? []).reduce((sum: number, h: Holding) => sum + h.rawValue, 0)
+        if (totalValue > 0) {
+          json.holdings = json.holdings.map((h: Holding) => ({
+            ...h,
+            weightPercent: (h.rawValue / totalValue) * 100,
+          }))
+        }
         setData(json)
         if (json.filing) {
           setSelectedQuarter(json.filing.quarter)
@@ -212,6 +262,9 @@ export default function InstitutionPage() {
 
         {/* Holdings table */}
         <div className="mt-6">
+          {!isLoading && data && (
+            <ConcentrationSummary holdings={data.holdings} />
+          )}
           <HoldingsTable
             holdings={data?.holdings ?? []}
             isLoading={isLoading}
