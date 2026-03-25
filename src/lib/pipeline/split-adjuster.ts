@@ -65,11 +65,27 @@ const POLYGON_BASE = process.env.POLYGON_API_KEY
   ? 'https://api.polygon.io'
   : ''
 
-// Rate limiter for Polygon.io API (free tier: 5 req/min, 12s between calls)
-// All concurrent callers share a promise queue — only one runs at a time
+// Time-based rate limiting for Polygon.io (free tier: 5 req/min, 12s between calls).
+// When Polygon is failing (consecutive errors), callers skip Polygon entirely and
+// fall through to Yahoo Finance — no waiting.
+//
+// Queue-based slot assignment prevents concurrent requests from racing past the
+// 12-second window. Each slot then enforces the minimum interval before the
+// actual API call proceeds.
 let rateLimitQueue: Promise<void> = Promise.resolve()
+let lastPolygonRequestTime = 0
+const POLYGON_MIN_INTERVAL_MS = 12_000
+
+// Track consecutive failures to detect when Polygon.io is down
+let polygonConsecutiveFailures = 0
+const POLYGON_FAILURE_THRESHOLD = 3
 
 async function rateLimitPolygon(): Promise<void> {
+  // If Polygon has been failing, skip entirely so callers fall through to Yahoo Finance
+  if (polygonConsecutiveFailures >= POLYGON_FAILURE_THRESHOLD) {
+    return
+  }
+
   // Capture our slot in the queue
   const ourSlot = rateLimitQueue
 
@@ -77,14 +93,27 @@ async function rateLimitPolygon(): Promise<void> {
   let resolveNext: () => void
   rateLimitQueue = new Promise<void>((r) => { resolveNext = r })
 
-  // Wait for everyone ahead of us to finish
+  // Wait for everyone ahead of us to finish their slot
   await ourSlot
 
-  // Wait 12s for our rate limit window
-  await new Promise<void>((r) => setTimeout(r, 12_000))
+  // Enforce minimum interval between actual API calls
+  const now = Date.now()
+  const elapsed = now - lastPolygonRequestTime
+  if (elapsed < POLYGON_MIN_INTERVAL_MS) {
+    await new Promise<void>((r) => setTimeout(r, POLYGON_MIN_INTERVAL_MS - elapsed))
+  }
+  lastPolygonRequestTime = Date.now()
 
   // Done — let the next in line proceed
   resolveNext!()
+}
+
+function recordPolygonFailure(): void {
+  polygonConsecutiveFailures++
+}
+
+function recordPolygonSuccess(): void {
+  polygonConsecutiveFailures = 0
 }
 
 /**
@@ -221,9 +250,10 @@ async function resolveCusipToTicker(cusip: string): Promise<string | null> {
 
   if (!POLYGON_BASE) return null
 
-  await rateLimitPolygon()
-
   try {
+    // Wait for rate limit slot before making the request
+    await rateLimitPolygon()
+
     const url =
       `${POLYGON_BASE}/v3/reference/tickers` +
       `?cusip=${encodeURIComponent(cusip)}` +
@@ -234,7 +264,19 @@ async function resolveCusipToTicker(cusip: string): Promise<string | null> {
       signal: AbortSignal.timeout(10_000),
     })
 
-    if (!response.ok) return null
+    if (response.status === 429) {
+      // Rate limited — wait and return null so Yahoo Finance is tried instead
+      recordPolygonFailure()
+      await new Promise<void>((r) => setTimeout(r, 12_000))
+      return null
+    }
+
+    if (!response.ok) {
+      recordPolygonFailure()
+      return null
+    }
+
+    recordPolygonSuccess()
 
     const data = await response.json()
     const result = data?.results?.[0]
@@ -245,6 +287,7 @@ async function resolveCusipToTicker(cusip: string): Promise<string | null> {
     }
     return ticker
   } catch {
+    // Network / timeout error — skip Polygon entirely, fall through to Yahoo Finance
     return null
   }
 }
@@ -270,9 +313,16 @@ async function fetchPolygonSplits(ticker: string, beforeDate: Date): Promise<Map
     })
 
     if (!response.ok) {
-      console.warn(`[splitAdjuster] Polygon.io returned ${response.status} for ticker ${ticker}`)
+      if (response.status === 429) {
+        recordPolygonFailure()
+        await new Promise<void>((r) => setTimeout(r, 12_000))
+      } else {
+        recordPolygonFailure()
+      }
       return new Map()
     }
+
+    recordPolygonSuccess()
 
     const data: PolygonSplitsResponse = await response.json()
     const results = data.results ?? []
@@ -289,6 +339,7 @@ async function fetchPolygonSplits(ticker: string, beforeDate: Date): Promise<Map
 
     return splitsMap
   } catch (err) {
+    recordPolygonFailure()
     const msg = err instanceof Error ? err.message : String(err)
     console.warn(`[splitAdjuster] Polygon.io fetch failed for ticker ${ticker}: ${msg}`)
     return new Map()

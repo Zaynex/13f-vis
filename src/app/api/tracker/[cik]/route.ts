@@ -230,7 +230,19 @@ export async function GET(
         }),
       ])
 
-      const response = buildTwoQuarterResponse(institution, refetchedFrom!, refetchedTo!, fromQuarter, toQuarter)
+      if (!refetchedFrom || !refetchedTo) {
+        // This shouldn't happen if dynamicFetch succeeded — but guard anyway
+        const available = await getAvailableQuartersForCik(cik)
+        return NextResponse.json(
+          {
+            error: 'Filing still missing after dynamic fetch — data may be unavailable on SEC EDGAR',
+            availableQuarters: available,
+          },
+          { status: 404 },
+        )
+      }
+
+      const response = buildTwoQuarterResponse(institution, refetchedFrom, refetchedTo, fromQuarter, toQuarter)
       return NextResponse.json({ ...response, _fetched: true })
     }
 
