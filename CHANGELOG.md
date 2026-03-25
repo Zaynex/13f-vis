@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0.0] - 2026-03-25
+
+### Added
+- **Dynamic query mode** — API endpoints (`/api/institutions/[cik]/holdings` and `/api/tracker/[cik]`) now auto-fetch missing quarters from SEC EDGAR on demand. No manual pipeline runs needed for new quarters. Concurrent requests for the same missing quarter share one pipeline run via a Promise deduplication cache, preventing thundering herd.
+- **Dynamic fetch design doc** — Added `docs/DYNAMIC-FETCH-PLAN.md` documenting the architecture (Promise deduplication, SEC EDGAR fallback, error handling).
+
+### Fixed
+- **Polygon.io rate limiter race condition** — Restored queue-based slot assignment to prevent concurrent requests from racing past the 12-second rate limit window.
+- **Tracker route null-safety** — Added null checks after dynamic fetch re-query to prevent runtime crash when only one quarter was missing and the other was unavailable on SEC EDGAR.
+- **API test fixtures** — MSW handlers now validate query params before returning fixture data, and bypass to the real server when no fixture exists (enabling true integration tests for dynamic fetch).
+
 ## [0.2.6.0] - 2026-03-24
 
 ### Added
