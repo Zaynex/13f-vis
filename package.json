@@ -1,6 +1,6 @@
 {
   "name": "sec-13f-visualizer",
-  "version": "0.3.0.0",
+  "version": "0.4.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -26,6 +26,7 @@
     "next": "15.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
     "xml2js": "^0.6.2",
     "zod": "^3.23.8"
   },

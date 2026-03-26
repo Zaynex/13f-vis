@@ -20,6 +20,7 @@
 
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import type { Decimal } from '@prisma/client/runtime/library'
 import { TrackerQuerySchema } from '@/lib/schema'
 import { calculateChangeBadge, ChangeBadge } from '@/lib/schema'
 import { dynamicFetch, getAvailableQuartersForCik } from '@/lib/pipeline/dynamic-fetch'
@@ -270,7 +271,7 @@ export async function GET(
 
 function buildMultiQuarterResponse(
   institution: { cik: string; name: string },
-  filings: Array<{ quarter: string; holdings: Array<{ cusip: string; companyName: string; adjustedShares: bigint | number; rawValue: bigint | number }> }>,
+  filings: Array<{ quarter: string; holdings: Array<{ cusip: string; companyName: string; adjustedShares: bigint | number; rawValue: Decimal | bigint | number }> }>,
   quarters: string[],
 ) {
   // Build per-quarter CUSIP maps
@@ -327,8 +328,8 @@ function buildMultiQuarterResponse(
 
 function buildTwoQuarterResponse(
   institution: { cik: string; name: string },
-  fromFiling: { holdings: Array<{ cusip: string; companyName: string; adjustedShares: bigint | number; rawValue: bigint | number }> },
-  toFiling: { holdings: Array<{ cusip: string; companyName: string; adjustedShares: bigint | number; rawValue: bigint | number }> },
+  fromFiling: { holdings: Array<{ cusip: string; companyName: string; adjustedShares: bigint | number; rawValue: Decimal | bigint | number }> },
+  toFiling: { holdings: Array<{ cusip: string; companyName: string; adjustedShares: bigint | number; rawValue: Decimal | bigint | number }> },
   fromQuarter: string,
   toQuarter: string,
 ) {
