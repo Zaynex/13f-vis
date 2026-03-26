@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.4.0.0] - 2026-03-26
+
+### Added
+- **Portfolio distribution pie chart** — Institution holdings page now shows a donut chart of top-10 holdings + "Others" bucket with hover tooltips showing value, weight %, and QoQ change badge. Built with recharts, with a pure `computePieSlices()` function for full testability.
+
 ## [0.3.0.0] - 2026-03-25
 
 ### Added

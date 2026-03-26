@@ -38,6 +38,12 @@
 - **Completed:** 2026-03-24 (v0.2.6.0) — Minimal approach implemented: weight % column on holdings table + top-10 concentration metric + portfolio value + largest position in concentration summary panel. Full sector/industry classification (Tech, Healthcare, etc.) deferred — requires external data enrichment API.
 - **Where:** `src/app/institutions/[cik]/page.tsx`, `src/components/HoldingsTable.tsx`
 
+### Portfolio Distribution Pie Chart
+- **What:** Added donut chart of top-10 holdings + "Others" bucket with hover tooltips showing value, weight %, and QoQ change badge on the institution holdings page.
+- **Why:** Visual pie/donut charts are the standard for portfolio distribution — immediately shows concentration and largest positions without reading a table.
+- **Where:** `src/components/HoldingsPieChart.tsx`, `src/lib/holdings-pie.ts`, `src/app/institutions/[cik]/page.tsx`
+- **Completed:** 2026-03-26 (v0.4.0.0)
+
 ## Deferred (post-MVP)
 
 ### Company-to-Institution Search (Reverse Lookup)
