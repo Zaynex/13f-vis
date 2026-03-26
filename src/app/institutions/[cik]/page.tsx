@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { HoldingsTable } from '@/components/HoldingsTable'
+import { HoldingsPieChart } from '@/components/HoldingsPieChart'
 import type { ChangeType } from '@prisma/client'
 
 interface Holding {
@@ -264,6 +265,9 @@ export default function InstitutionPage() {
         <div className="mt-6">
           {!isLoading && data && (
             <ConcentrationSummary holdings={data.holdings} />
+          )}
+          {!isLoading && data && data.holdings.length > 0 && (
+            <HoldingsPieChart holdings={data.holdings} />
           )}
           <HoldingsTable
             holdings={data?.holdings ?? []}
