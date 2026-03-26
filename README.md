@@ -87,4 +87,5 @@ For users unfamiliar with financial terminology (CUSIP, 13F, ETF, split-adjusted
 - React Query (data fetching/caching)
 - Tailwind CSS (dark-first design)
 - Zod (validation)
+- recharts (portfolio distribution pie chart)
 - cheerio (HTML parsing)
