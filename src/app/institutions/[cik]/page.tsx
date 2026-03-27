@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { HoldingsTable } from '@/components/HoldingsTable'
 import { HoldingsPieChart } from '@/components/HoldingsPieChart'
 import type { ChangeType } from '@prisma/client'
+import { supabase } from '@/lib/supabase'
 
 interface Holding {
   cusip: string
@@ -149,6 +150,29 @@ export default function InstitutionPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null)
   const [quarters, setQuarters] = useState<string[]>([])
+  const [isTracked, setIsTracked] = useState(false)
+  const [isTracking, setIsTracking] = useState(false)
+
+  async function handleTrackToggle() {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      router.push(`/auth?next=/institutions/${cik}`)
+      return
+    }
+    setIsTracking(true)
+    if (isTracked) {
+      await fetch(`/api/user/track?cik=${cik}`, { method: 'DELETE' })
+      setIsTracked(false)
+    } else {
+      const res = await fetch('/api/user/track', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cik }),
+      })
+      if (res.ok) setIsTracked(true)
+    }
+    setIsTracking(false)
+  }
 
   const fetchHoldings = useCallback(
     async (quarter?: string) => {
@@ -189,6 +213,15 @@ export default function InstitutionPage() {
       .then((d) => {
         if (d.filings) {
           setQuarters([...new Set(d.filings.map((f: { quarter: string }) => f.quarter))].sort().reverse() as string[])
+        }
+      })
+      .catch(() => {})
+    // Check if tracked
+    fetch('/api/user/track')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.tracked) {
+          setIsTracked(d.tracked.some((t: { institution_cik: string }) => t.institution_cik === cik))
         }
       })
       .catch(() => {})
@@ -235,6 +268,17 @@ export default function InstitutionPage() {
             >
               Track Changes
             </Link>
+            <button
+              onClick={handleTrackToggle}
+              disabled={isTracking}
+              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
+                isTracked
+                  ? 'border-emerald-600 bg-emerald-950 text-emerald-400 hover:border-emerald-500'
+                  : 'border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]'
+              }`}
+            >
+              {isTracking ? '…' : isTracked ? '✓ Tracked' : '+ Track Fund'}
+            </button>
           </div>
         </div>
 
