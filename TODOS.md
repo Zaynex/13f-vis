@@ -44,6 +44,12 @@
 - **Where:** `src/components/HoldingsPieChart.tsx`, `src/lib/holdings-pie.ts`, `src/app/institutions/[cik]/page.tsx`
 - **Completed:** 2026-03-26 (v0.4.0.0)
 
+### Supabase Auth + User Watchlists
+- **What:** Added Supabase Auth (email + Google OAuth) with dual-client architecture — Prisma + local PostgreSQL for SEC data, Supabase for user auth and watchlists. New `/auth` page, `/watchlist` page, middleware-protected API routes, and "Track Fund" button on institution pages.
+- **Why:** Turns the app into a personal investment tracking tool — users log in to save tracked funds.
+- **Where:** `src/lib/supabase.ts`, `src/middleware.ts`, `src/app/auth/`, `src/app/watchlist/`, `src/app/api/user/`, `src/app/institutions/[cik]/page.tsx`
+- **Completed:** 2026-03-27 (v0.5.0.0)
+
 ## Deferred (post-MVP)
 
 ### Company-to-Institution Search (Reverse Lookup)
@@ -56,7 +62,7 @@
 - **What:** Notify when a tracked institution's position changes by >25% QoQ
 - **Why:** Creates ongoing engagement beyond passive browsing
 - **Priority:** P2
-- **Depends on:** User accounts system
+- **Depends on:** Supabase Auth (unblocked by v0.5.0.0)
 
 ## Known Limitations
 
