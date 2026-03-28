@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0.0] - 2026-03-27
+
+### Added
+- **Supabase Auth** — Added email/password and Google OAuth login via `@supabase/ssr`. New `/auth` page with login/signup toggle. Next.js middleware protects `/watchlist` and `/api/user/*` routes, redirecting unauthenticated users to `/auth?next=<return-path>`.
+- **User watchlist** — New `/watchlist` page shows tracked institutions with latest quarter value. Users can add/remove tracked funds from the institution page via a "Track Fund" button.
+- **Protected API routes** — `GET/POST/DELETE /api/user/track` and `GET/POST /api/user/alerts` for managing watchlists and alerts (Supabase, RLS-protected).
+- **Dual-client architecture** — Supabase client (`src/lib/supabase.ts`) added alongside existing Prisma/PostgreSQL. Public routes (`/`, `/institutions/[cik]`, `/compare`, `/tracker/[cik]`) remain unauthenticated. Prisma + local PostgreSQL continues handling all SEC EDGAR pipeline work.
+
 ## [0.4.0.0] - 2026-03-26
 
 ### Added
