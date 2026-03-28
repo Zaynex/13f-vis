@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0.1] - 2026-03-29
+
+### Added
+- **Database sync scripts** — Added `npm run db:sync` and `npm run db:sync:full` for syncing local PostgreSQL database to Supabase. The incremental sync script supports both full and incremental modes based on `updatedAt` timestamps.
+
+### Documentation
+- **Tool preferences** — Documented preference for official CLI tools over raw commands in CLAUDE.md.
+
 ## [0.5.0.0] - 2026-03-27
 
 ### Added
