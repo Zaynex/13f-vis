@@ -11,6 +11,8 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:sync": "./supabase/scripts/incremental-sync.sh",
+    "db:sync:full": "./supabase/scripts/incremental-sync.sh full",
     "pipeline:run": "node --env-file=.env.local node_modules/.bin/tsx src/lib/pipeline/run.ts",
     "test": "vitest",
     "test:unit": "vitest run tests/unit",
