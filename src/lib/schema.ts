@@ -78,6 +78,23 @@ export const TrackerQuerySchema = z.object({
   to: z.string().regex(/^\d{4}-Q[1-4]$/, 'Quarter must be YYYY-QN format'),
 })
 
+// ─── CIK Request ──────────────────────────────────────────────────────────────
+
+export const CikRequestSchema = z.object({
+  cik: z.string()
+    .regex(/^\d{1,10}$/, 'CIK must be 1-10 digits')
+    .transform((v) => v.padStart(10, '0')),
+  name: z.string()
+    .min(1, 'Institution name is required')
+    .max(200, 'Name too long')
+    .trim(),
+  notes: z.string().max(500).optional(),
+})
+
+export const CikRequestStatusSchema = z.object({
+  status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
+})
+
 // ─── Change Badge Calculation ─────────────────────────────────────────────────
 //
 // Given current and prior quarter adjusted share counts, classify the change.

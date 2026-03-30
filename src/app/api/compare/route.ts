@@ -9,8 +9,8 @@ import { ComparisonSchema } from '@/lib/schema'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const ciksParam = searchParams.get('ciks') ?? ''
-  const quarter = searchParams.get('quarter') ?? undefined
+  const ciksParam = (await searchParams.get('ciks')) ?? ''
+  const quarter = (await searchParams.get('quarter')) ?? undefined
 
   // Validate input
   const ciks = ciksParam.split(',').map((c) => c.trim()).filter(Boolean)
@@ -78,7 +78,7 @@ export async function GET(request: Request) {
       const byCusip = new Map(
         filing.holdings.map((h) => [
           h.cusip,
-          { companyName: h.companyName, adjustedShares: h.adjustedShares, rawValue: Number(h.rawValue) },
+          { companyName: h.companyName, adjustedShares: Number(h.adjustedShares), rawValue: Number(h.rawValue) },
         ]),
       )
       holdingsByCik.set(cik, byCusip)

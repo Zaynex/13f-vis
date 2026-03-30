@@ -17,6 +17,24 @@ model Institution {
   @@index([name])
 }
 
+model RequestedInstitution {
+  id        String   @id @default(cuid())
+  cik       String   @unique
+  name      String
+  status    RequestStatus @default(PENDING)
+  requestedAt DateTime @default(now())
+  processedAt DateTime?
+  requestedBy String?  // User ID if authenticated, otherwise session/metadata
+  notes     String?
+  @@index([status])
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model Filing {
   id                String      @id @default(cuid())
   institutionCik    String
@@ -40,11 +58,11 @@ model Holding {
   filingId              String
   cusip                 String
   companyName           String
-  rawShares             Int
+  rawShares             BigInt
   rawValue              Decimal    @db.Decimal(18, 2)
   cumulativeSplitFactor Decimal    @default(1.0)
-  adjustedShares        Int
-  priorAdjustedShares   Int?
+  adjustedShares        BigInt
+  priorAdjustedShares   BigInt?
   changeType            ChangeType @default(UNCHANGED)
   changePercent         Decimal?   @db.Decimal(8, 2)
   createdAt             DateTime   @default(now())

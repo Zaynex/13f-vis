@@ -646,7 +646,10 @@ async function getPriorQuarterHoldings(cik: string, quarter: string): Promise<Pr
     include: { holdings: { select: { cusip: true, adjustedShares: true } } },
   })
 
-  return priorFiling?.holdings ?? []
+  return (priorFiling?.holdings ?? []).map((h) => ({
+    cusip: h.cusip,
+    adjustedShares: Number(h.adjustedShares),
+  }))
 }
 
 // ─── Quarter Utilities ─────────────────────────────────────────────────────
