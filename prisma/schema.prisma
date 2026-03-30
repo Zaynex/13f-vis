@@ -7,26 +7,14 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Institution {
-  cik       String   @id
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  filings   Filing[]
+// ─── Enums ───────────────────────────────────────────────────────────────────
 
-  @@index([name])
-}
-
-model RequestedInstitution {
-  id        String   @id @default(cuid())
-  cik       String   @unique
-  name      String
-  status    RequestStatus @default(PENDING)
-  requestedAt DateTime @default(now())
-  processedAt DateTime?
-  requestedBy String?  // User ID if authenticated, otherwise session/metadata
-  notes     String?
-  @@index([status])
+enum ChangeType {
+  NEW
+  EXITED
+  INCREASED
+  DECREASED
+  UNCHANGED
 }
 
 enum RequestStatus {
@@ -35,18 +23,57 @@ enum RequestStatus {
   REJECTED
 }
 
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Institution {
+  cik       String   @id
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  filings   Filing[]
+  trackedBy UserTrackedInstitution[]
+
+  @@index([name])
+}
+
+model RequestedInstitution {
+  id           String        @id @default(cuid())
+  cik          String        @unique
+  name         String
+  status       RequestStatus @default(PENDING)
+  requestedAt  DateTime     @default(now())
+  processedAt  DateTime?
+  requestedBy  String?
+  notes        String?
+  @@index([status])
+}
+
+// User-supabase auth link: stores thresholdPct per tracked institution
+model UserTrackedInstitution {
+  id              String      @id @default(cuid())
+  userId          String      // Supabase user ID
+  institutionCik  String
+  thresholdPct    Int         @default(25)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  institution     Institution  @relation(fields: [institutionCik], references: [cik])
+
+  @@unique([userId, institutionCik])
+  @@index([userId])
+}
+
 model Filing {
-  id                String      @id @default(cuid())
-  institutionCik    String
-  quarter           String
-  filedAt           DateTime
-  filingUrl         String
-  isAmended         Boolean     @default(false)
-  holdingsFetchedAt DateTime?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
-  institution       Institution @relation(fields: [institutionCik], references: [cik])
-  holdings          Holding[]
+  id                 String      @id @default(cuid())
+  institutionCik     String
+  quarter            String
+  filedAt            DateTime
+  filingUrl          String
+  isAmended          Boolean     @default(false)
+  holdingsFetchedAt  DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  institution        Institution  @relation(fields: [institutionCik], references: [cik])
+  holdings           Holding[]
 
   @@unique([institutionCik, quarter])
   @@index([institutionCik])
@@ -62,22 +89,14 @@ model Holding {
   rawValue              Decimal    @db.Decimal(18, 2)
   cumulativeSplitFactor Decimal    @default(1.0)
   adjustedShares        BigInt
-  priorAdjustedShares   BigInt?
+  priorAdjustedShares  BigInt?
   changeType            ChangeType @default(UNCHANGED)
   changePercent         Decimal?   @db.Decimal(8, 2)
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
-  filing                Filing     @relation(fields: [filingId], references: [id])
+  filing               Filing      @relation(fields: [filingId], references: [id])
 
   @@unique([filingId, cusip])
   @@index([cusip])
   @@index([filingId])
-}
-
-enum ChangeType {
-  NEW
-  EXITED
-  INCREASED
-  DECREASED
-  UNCHANGED
 }

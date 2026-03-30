@@ -95,6 +95,24 @@ export const CikRequestStatusSchema = z.object({
   status: z.enum(['PENDING', 'APPROVED', 'REJECTED']),
 })
 
+// ─── Alerts ──────────────────────────────────────────────────────────────────
+
+export const CreateAlertSchema = z.object({
+  institutionCik: z.string().regex(/^\d{10}$/, 'CIK must be 10 digits'),
+  thresholdPct: z.number().int().min(5).max(100).default(25),
+})
+
+export const AlertEventSchema = z.object({
+  id: z.string(),
+  quarter: z.string(),
+  cusip: z.string(),
+  companyName: z.string(),
+  changeType: z.enum(['NEW', 'EXITED', 'INCREASED', 'DECREASED', 'UNCHANGED']),
+  changePercent: z.number(),
+  firedAt: z.string(),
+  read: z.boolean(),
+})
+
 // ─── Change Badge Calculation ─────────────────────────────────────────────────
 //
 // Given current and prior quarter adjusted share counts, classify the change.

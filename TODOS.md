@@ -23,12 +23,15 @@
 - **Where:** `docs/SEC-FILING-FORMATS.md`
 - **Completed:** 2026-03-20
 
-### Initial Institution Set
-- **What:** Seed the database with 10 major funds (Berkshire, Bridgewater, Citadel, etc.)
-- **Why:** Need at least 5-10 institutions for the comparison tool to be meaningful
-- **Priority:** P1
-- **Status:** Done — 9/9 institutions have holdings loaded. Corrected CIKs for Citadel (0001423053), Two Sigma (0001179392), Point72 (HK 0001599822, London 0001698051), BlackRock (0001003283), Susquehanna (0000924808). Berkshire Hathaway (0001067983), Bridgewater (0001600319), Brown Brothers Harriman (0000014661) had correct CIKs. Vanguard files 13F-NT only under its US entity — excluded.
-- **Completed:** 2026-03-22
+### Institution Coverage Expansion
+- **What:** Two-phase SEC EDGAR auto-discovery + institution directory page
+- **Why:** Only 9 institutions was insufficient — users had nothing to browse and left quickly
+- **Phase 1:** `scripts/discover-institutions.ts` — company_tickers.json (Phase 1) + pre-researched CIKs (Phase 2). Discovered 5 new institutions: Vanguard (0000102909), Goldman Sachs (0000886982), JPMorgan (0000019617), State Street (0000093751), Hollencrest Capital Management (0001161722). Total: 14 institutions, 661+ quarters.
+- **Phase 2:** `/institutions` directory page with search, CIK request modal, `POST /api/institutions/request` endpoint, `RequestedInstitution` model with PENDING/APPROVED/REJECTED workflow.
+- **BigInt fix:** `rawShares`/`adjustedShares` changed from `Int` to `BigInt` — Vanguard has >2B shares, overflowed 32-bit INT4.
+- **CLI:** Added `--fast` flag to skip Yahoo Finance split adjustment for faster bulk loading.
+- **Completed:** 2026-03-31 (v0.5.0.2)
+- **Where:** `scripts/discover-institutions.ts`, `src/app/institutions/page.tsx`, `src/app/api/institutions/request/route.ts`, `prisma/schema.prisma`
 
 ### Sector Allocation Analysis
 - **What:** Show % of portfolio in Tech, Healthcare, etc., and concentration risk (top 10 = X%)
