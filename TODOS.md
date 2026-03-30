@@ -62,9 +62,10 @@
 - **Depends on:** Sector classification (add industry tags)
 
 ### Alert System
-- **What:** Notify when a tracked institution's position changes by >25% QoQ
+- **What:** Institution-level alerts computed dynamically at query time — fires when any holding changes by >thresholdPct (NEW, EXITED, INCREASED >X%, DECREASED >X%)
 - **Why:** Creates ongoing engagement beyond passive browsing
 - **Priority:** P2
+- **Completed:** 2026-03-31 (v0.5.0.3) — GET /api/user/alerts computes fired alerts for all tracked institutions, POST upserts threshold per fund. UserTrackedInstitution model stores thresholdPct (default 25%) per user+institution.
 - **Depends on:** Supabase Auth (unblocked by v0.5.0.0)
 
 ## Known Limitations

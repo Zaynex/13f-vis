@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0.3] - 2026-03-31
+
+### Added
+- **Institution-level alerts** — `GET /api/user/alerts` computes significant holdings changes vs prior quarter (NEW, EXITED, INCREASED/DECREASED >threshold%). Users set a threshold per tracked fund (default 25%). Shown on watchlist page so users spot major position changes at a glance.
+
 ## [0.5.0.2] - 2026-03-31
 
 ### Added
