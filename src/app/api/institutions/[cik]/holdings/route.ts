@@ -20,8 +20,8 @@ export async function GET(
   { params }: { params: Promise<{ cik: string }> },
 ) {
   const { searchParams } = new URL(request.url)
-  const quarter = searchParams.get('quarter') ?? undefined
-  const fetchIfMissing = searchParams.get('fetchIfMissing') !== 'false'
+  const quarter = (await searchParams).get('quarter') ?? undefined
+  const fetchIfMissing = (await searchParams).get('fetchIfMissing') !== 'false'
 
   const { cik } = await params
 
@@ -130,13 +130,13 @@ async function buildHoldingsResponse(
   })
 
   const priorByCusip = new Map(
-    (priorFiling?.holdings ?? []).map((h) => [h.cusip, h.adjustedShares]),
+    (priorFiling?.holdings ?? []).map((h) => [h.cusip, Number(h.adjustedShares)]),
   )
 
   const holdings = filing.holdings.map((h) => ({
     cusip: h.cusip,
     companyName: h.companyName,
-    adjustedShares: h.adjustedShares,
+    adjustedShares: Number(h.adjustedShares),
     rawValue: Number(h.rawValue),
     priorAdjustedShares: priorByCusip.get(h.cusip) ?? null,
     changeType: h.changeType,
