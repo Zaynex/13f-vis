@@ -20,15 +20,20 @@ import { PrismaClient } from '@prisma/client'
 const prisma = new PrismaClient()
 
 const INSTITUTIONS = [
-  { cik: '0001067983', name: 'BERKSHIRE HATHAWAY INC' },            // 40 13F-HR filings
+  { cik: '0001067983', name: 'BERKSHIRE HATHAWAY INC' },            // 45 13F-HR filings
   { cik: '0001600319', name: 'BRIDGEWATER ADVISORS INC' },           // 23 13F-HR filings
-  { cik: '0001179392', name: 'TWO SIGMA INVESTMENTS LP' },          // 93 13F-HR filings
-  { cik: '0001423053', name: 'CITADEL ADVISORS LLC' },               // 40 13F-HR filings
-  { cik: '0001599822', name: 'POINT72 HONG KONG LTD' },              // 48 13F-HR filings (HK entity — US entity files SC 13G only)
+  { cik: '0001179392', name: 'TWO SIGMA INVESTMENTS LP' },          // 114 13F-HR filings
+  { cik: '0001423053', name: 'CITADEL ADVISORS LLC' },               // 63 13F-HR filings
+  { cik: '0001599822', name: 'POINT72 HONG KONG LTD' },              // 48 13F-HR filings
   { cik: '0001698051', name: 'POINT72 EUROPE (LONDON) LLP' },       // 36 13F-HR filings
-  { cik: '0000924808', name: 'SUSQUEHANNA INTERNATIONAL GROUP LLP' }, // 24 13F-HR filings
-  { cik: '0000014661', name: 'BROWN BROTHERS HARRIMAN & CO' },       // 106 13F-HR filings
-  { cik: '0001003283', name: 'BLACKROCK GROUP LTD' },                // 71 13F-HR filings
+  { cik: '0000924808', name: 'SUSQUEHANNA INTERNATIONAL GROUP LLP' }, // 0 13F-HR filings (no 13F-HR found)
+  { cik: '0000014661', name: 'BROWN BROTHERS HARRIMAN & CO' },       // 118 13F-HR filings
+  { cik: '0001003283', name: 'BLACKROCK GROUP LTD' },                // 79 13F-HR filings
+  { cik: '0001161722', name: 'HOLLENCREST CAPITAL MANAGEMENT' },     // 110 13F-HR filings (Vanguard Group subsidiary)
+  { cik: '0000093751', name: 'STATE STREET CORP' },                  // 9 13F-HR filings
+  { cik: '0000886982', name: 'GOLDMAN SACHS GROUP INC' },           // 7 13F-HR filings
+  { cik: '0000019617', name: 'JPMORGAN CHASE & CO' },               // 5 13F-HR filings
+  { cik: '0000102909', name: 'VANGUARD GROUP INC' },                // 4 13F-HR filings
 ]
 
 async function main() {

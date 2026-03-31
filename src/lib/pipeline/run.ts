@@ -19,6 +19,7 @@ async function main() {
       backfill: { type: 'boolean' },
       'max-quarters': { type: 'string' },
       'no-split-adjust': { type: 'boolean' },
+      fast: { type: 'boolean' },
       help: { type: 'boolean' },
     },
   })
@@ -32,6 +33,8 @@ Usage:
   npm run pipeline:run -- --all                               # run for all seeded institutions (recent quarter only)
   npm run pipeline:run -- --all --backfill                    # run for all seeded institutions, ALL available quarters
   npm run pipeline:run -- --all --backfill --max-quarters 8  # limit to last 8 quarters
+  npm run pipeline:run -- --all --backfill --fast            # fast mode: skip split adjustment (use raw shares)
+  npm run pipeline:run -- --cik 0001067983 --backfill        # single CIK, all available quarters
   npm run pipeline:run -- --cik 0001067983 --backfill --no-split-adjust  # skip Yahoo Finance split data
 
 Options:
@@ -40,12 +43,13 @@ Options:
   --all              Run for all institutions in the database
   --backfill         Fetch ALL available historical quarters (not just recent)
   --max-quarters     Limit how many quarters to backfill (default: unlimited)
-  --no-split-adjust Skip Yahoo Finance split adjustment (use raw shares)
+  --fast             Skip Yahoo Finance split adjustment (use raw shares) — faster bulk loading
+  --no-split-adjust  Alias for --fast (same behavior)
 `)
     process.exit(0)
   }
 
-  const skipSplitAdjustment = values['no-split-adjust'] ?? false
+  const skipSplitAdjustment = values['no-split-adjust'] ?? values.fast ?? false
 
   if (skipSplitAdjustment) {
     console.log('[pipeline] Note: Skipping Yahoo Finance split adjustment (using raw shares)')

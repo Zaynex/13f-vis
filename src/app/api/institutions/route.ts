@@ -7,7 +7,13 @@ import { InstitutionSearchSchema } from '@/lib/schema'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const query = searchParams.get('q') ?? ''
+  const query = (await searchParams).get('q') ?? ''
+
+  // Validate query param against schema
+  const parsed = InstitutionSearchSchema.safeParse({ query })
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'Invalid query parameter' }, { status: 400 })
+  }
 
   try {
     const institutions = await prisma.institution.findMany({

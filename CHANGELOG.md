@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0.3] - 2026-03-31
+
+### Added
+- **Institution-level alerts** — `GET /api/user/alerts` computes significant holdings changes vs prior quarter (NEW, EXITED, INCREASED/DECREASED >threshold%). Users set a threshold per tracked fund (default 25%). Shown on watchlist page so users spot major position changes at a glance.
+
+## [0.5.0.2] - 2026-03-31
+
+### Added
+- **Institution coverage expansion** — Added 5 new institutions (Vanguard, Goldman Sachs, JPMorgan, State Street, Hollencrest Capital Management). Total tracked: 14 institutions, 661+ quarters of filings.
+- **SEC EDGAR auto-discovery** — `scripts/discover-institutions.ts` discovers new CIKs using company_tickers.json + pre-researched CIK lists, verifying each has 13F-HR filings via SEC EDGAR Submissions API.
+- **Institution directory** — New `/institutions` page with searchable grid of all tracked funds.
+- **CIK request system** — `POST /api/institutions/request` allows authenticated users to submit CIKs for tracking. `RequestedInstitution` model tracks PENDING/APPROVED/REJECTED workflow.
+- **`--fast` flag** — Pipeline CLI now supports `--fast` to skip Yahoo Finance split adjustment for faster bulk loading.
+
+### Fixed
+- **BigInt overflow** — `rawShares` and `adjustedShares` changed from `Int` to `BigInt` (Vanguard has >2B shares, overflowed 32-bit INT4).
+- **Next.js 16 async searchParams** — Fixed `searchParams.get()` to use `await searchParams.get()` in compare route.
+
 ## [0.5.0.1] - 2026-03-29
 
 ### Added
