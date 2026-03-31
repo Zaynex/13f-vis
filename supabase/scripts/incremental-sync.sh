@@ -47,6 +47,13 @@ do_full_sync() {
     log_info "Exporting all data from local database..."
     $PG_DUMP --file=dump_full.sql --clean --if-exists --inserts "$LOCAL_DB"
 
+    # Fix OWNER TO clauses for Supabase (replace local user with postgres)
+    local_db_user=$(echo "$LOCAL_DB" | sed -n 's/.*@\([^:]*\):.*/\1/p')
+    if [ -n "$local_db_user" ]; then
+        log_info "Fixing OWNER TO for Supabase (replacing '$local_db_user' with 'postgres')..."
+        sed -i '' "s/OWNER TO $local_db_user/OWNER TO postgres/g" dump_full.sql
+    fi
+
     # Import to Supabase
     log_info "Importing to Supabase..."
     $PSQL "$SUPABASE_DB_URL" < dump_full.sql
