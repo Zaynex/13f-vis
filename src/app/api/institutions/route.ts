@@ -9,10 +9,12 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const query = (await searchParams).get('q') ?? ''
 
-  // Validate query param against schema
-  const parsed = InstitutionSearchSchema.safeParse({ query })
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid query parameter' }, { status: 400 })
+  // Skip validation for empty query (means "return all")
+  if (query.length > 0) {
+    const parsed = InstitutionSearchSchema.safeParse({ query })
+    if (!parsed.success) {
+      return NextResponse.json({ error: 'Invalid query parameter' }, { status: 400 })
+    }
   }
 
   try {
