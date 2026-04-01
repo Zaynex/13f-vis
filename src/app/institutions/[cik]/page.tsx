@@ -161,8 +161,8 @@ export default function InstitutionPage() {
     }
     setIsTracking(true)
     if (isTracked) {
-      await fetch(`/api/user/track?cik=${cik}`, { method: 'DELETE' })
-      setIsTracked(false)
+      const res = await fetch(`/api/user/track?cik=${cik}`, { method: 'DELETE' })
+      if (res.ok) setIsTracked(false)
     } else {
       const res = await fetch('/api/user/track', {
         method: 'POST',
@@ -263,7 +263,7 @@ export default function InstitutionPage() {
               Compare
             </Link>
             <Link
-              href={`/tracker/${cik}`}
+              href="/watchlist"
               className="inline-flex items-center gap-2 rounded-lg border border-[var(--accent)] bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-white hover:bg-[var(--accent)]/90"
             >
               Track Changes
