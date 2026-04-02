@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0.4] - 2026-04-01
+
+### Fixed
+- **Schema mismatch** — `user_tracked_institutions` Supabase table now has `threshold_pct`, `updated_at`, and `dismissed_at` columns to match Prisma model. Alert threshold upserts no longer fail silently.
+- **Track route dual-store bug** — `POST/DELETE /api/user/track` now uses Prisma (unified with alerts route) instead of Supabase direct client. Eliminates split-brain writes to the same table.
+- **Alert computation crash** — `GET /api/user/alerts` now guards against malformed holdings arrays (null/non-array) with `Array.isArray` check. Also normalizes `changeType` to uppercase before comparing against `NEW`/`EXITED`.
+- **CIK validation** — `/api/user/track` now validates CIK with regex `/^\d{10}$/` instead of truthy-only check.
+- **Track toggle DELETE response** — institution page now checks DELETE response before updating `isTracked` state. Untrack failures no longer silently remove from UI.
+
+### Changed
+- **Watchlist N+1 eliminated** — `GET /api/user/track` now returns enriched data (institution name, latest quarter, total value, holdings count) in a single Prisma query. Watchlist page no longer makes N parallel `/api/tracker` calls.
+- **Watchlist Compare link** — now correctly goes to `/compare?ciks=${cik}` instead of `/tracker/${cik}`.
+- **Track Changes link** — now goes to `/watchlist` instead of `/tracker/${cik}` on institution pages.
+
+### Added
+- **Per-fund alert threshold** — watchlist cards now show a numeric threshold input (5–100%, debounced). Users can set a custom threshold per tracked fund.
+- **Fired alerts banner** — watchlist page shows a dismissible banner when any tracked fund has significant holdings changes in the latest quarter.
+- **Inline untrack error** — failed untrack operations now show an inline error message instead of silently updating the UI.
+- **Threshold tests** — added integration tests for auth rejection, CIK validation, threshold bounds, and malformed holdings handling.
+
 ## [0.5.0.3] - 2026-03-31
 
 ### Added

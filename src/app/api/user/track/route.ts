@@ -1,22 +1,16 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+// ─── GET: Return tracked institutions with enriched institution + latest filing data ─────
+// Replaces N+1 pattern where the watchlist page fetched each institution separately.
+// Returns all data in one query so the UI doesn't need parallel /api/tracker calls.
 
 export async function GET(request: NextRequest) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-        },
-      },
-    }
+    { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
   )
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -24,35 +18,54 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data, error } = await supabase
-    .from('user_tracked_institutions')
-    .select('institution_cik, created_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
+  // Use Prisma to join tracked institutions with their latest filing.
+  // Compute totalValue from holdings to eliminate the N parallel /api/tracker calls.
+  const tracked = await prisma.userTrackedInstitution.findMany({
+    where: { userId: user.id },
+    include: {
+      institution: {
+        include: {
+          filings: {
+            orderBy: { quarter: 'desc' },
+            take: 1,
+            include: {
+              holdings: { select: { rawValue: true } },
+            },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
+  const result = tracked.map((t) => {
+    const latestFiling = t.institution.filings[0]
+    const totalValue = latestFiling?.holdings.reduce((sum, h) => {
+      // rawValue is Decimal in Prisma, convert to number
+      return sum + Number(h.rawValue)
+    }, 0) ?? 0
+    return {
+      institutionCik: t.institutionCik,
+      createdAt: t.createdAt,
+      thresholdPct: t.thresholdPct,
+      institutionName: t.institution.name,
+      quarter: latestFiling?.quarter ?? null,
+      totalValue,
+      holdingsCount: latestFiling?.holdings.length ?? 0,
+    }
+  })
 
-  return NextResponse.json({ tracked: data })
+  return NextResponse.json({ tracked: result })
 }
+
+// ─── POST: Track (or update threshold for) an institution ─────────────────────
+// Uses Prisma to unify with the alerts route — both write to the same table.
 
 export async function POST(request: NextRequest) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-        },
-      },
-    }
+    { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
   )
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -60,43 +73,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { cik } = await request.json()
-  if (!cik) {
-    return NextResponse.json({ error: 'cik is required' }, { status: 400 })
+  const { cik, thresholdPct } = await request.json()
+
+  // Validate CIK format: exactly 10 digits
+  if (!cik || !/^\d{10}$/.test(cik)) {
+    return NextResponse.json({ error: 'Invalid CIK: must be exactly 10 digits' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
-    .from('user_tracked_institutions')
-    .insert({ user_id: user.id, institution_cik: cik })
-    .select()
-    .single()
-
-  if (error?.code === '23505') {
-    return NextResponse.json({ error: 'Already tracking this institution' }, { status: 409 })
+  // Upsert: create or update threshold. Default thresholdPct to 25 if not provided.
+  try {
+    const tracked = await prisma.userTrackedInstitution.upsert({
+      where: {
+        userId_institutionCik: { userId: user.id, institutionCik: cik },
+      },
+      update: {
+        // Only update thresholdPct if explicitly provided
+        ...(thresholdPct !== undefined && { thresholdPct }),
+      },
+      create: {
+        userId: user.id,
+        institutionCik: cik,
+        thresholdPct: thresholdPct ?? 25,
+      },
+    })
+    return NextResponse.json({ tracked }, { status: 201 })
+  } catch (err) {
+    // Prisma P2002 = unique constraint violation (shouldn't happen with upsert, but guard)
+    return NextResponse.json({ error: 'Failed to track institution' }, { status: 500 })
   }
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ tracked: data }, { status: 201 })
 }
+
+// ─── DELETE: Untrack an institution ──────────────────────────────────────────
 
 export async function DELETE(request: NextRequest) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-        },
-      },
-    }
+    { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
   )
 
   const { data: { user } } = await supabase.auth.getUser()
@@ -104,21 +117,18 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { searchParams } = new URL(request.url)
-  const cik = searchParams.get('cik')
-  if (!cik) {
-    return NextResponse.json({ error: 'cik query param is required' }, { status: 400 })
+  const cik = request.nextUrl?.searchParams.get('cik') ?? ''
+
+  if (!cik || !/^\d{10}$/.test(cik)) {
+    return NextResponse.json({ error: 'Invalid CIK: must be exactly 10 digits' }, { status: 400 })
   }
 
-  const { error } = await supabase
-    .from('user_tracked_institutions')
-    .delete()
-    .eq('user_id', user.id)
-    .eq('institution_cik', cik)
-
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  try {
+    await prisma.userTrackedInstitution.deleteMany({
+      where: { userId: user.id, institutionCik: cik },
+    })
+    return NextResponse.json({ success: true })
+  } catch {
+    return NextResponse.json({ error: 'Failed to untrack institution' }, { status: 500 })
   }
-
-  return NextResponse.json({ success: true })
 }

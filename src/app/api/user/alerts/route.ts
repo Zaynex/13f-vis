@@ -58,12 +58,16 @@ export async function GET(request: NextRequest) {
 
     const [current, prior] = filings
 
-    // Filter to significant changes in current quarter
-    const significant = current.holdings.filter((h) => {
-      if (h.changeType === 'NEW' || h.changeType === 'EXITED') return true
-      const pct = Number(h.changePercent)
-      return pct > track.thresholdPct || pct < -track.thresholdPct
-    })
+    // Filter to significant changes in current quarter.
+    // Guard: holdings may be null or non-array if DB row is malformed.
+    const significant = Array.isArray(current.holdings)
+      ? current.holdings.filter((h) => {
+          const ct = h.changeType?.toUpperCase()
+          if (ct === 'NEW' || ct === 'EXITED') return true
+          const pct = Number(h.changePercent)
+          return pct > track.thresholdPct || pct < -track.thresholdPct
+        })
+      : []
 
     if (significant.length > 0) {
       firedAlerts.push({
