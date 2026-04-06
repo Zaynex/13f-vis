@@ -11,8 +11,13 @@ const MOCK_USER_ID = 'test-user-123'
 const MOCK_USER_EMAIL = 'test@example.com'
 
 // Supabase auth mock - intercepts getUser() call
+// getUser() calls GET /auth/v1/user (NOT /me)
 function mockAuthUser() {
-  return http.get('*/auth/v1/me', () => {
+  return http.get('*/auth/v1/user', ({ request }) => {
+    const authHeader = request.headers.get('Authorization')
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return HttpResponse.json({ code: 401, error_code: 'no_authorization', msg: 'No Bearer token' }, { status: 401 })
+    }
     return HttpResponse.json({
       id: MOCK_USER_ID,
       email: MOCK_USER_EMAIL,
@@ -23,6 +28,13 @@ function mockAuthUser() {
       created_at: '2025-01-01T00:00:00.000Z',
       updated_at: '2025-01-01T00:00:00.000Z',
     })
+  })
+}
+
+// Mock for unauthenticated requests - getUser() returns null user
+function mockAuthMissing() {
+  return http.get('*/auth/v1/user', () => {
+    return HttpResponse.json({ code: 401, error_code: 'no_authorization', msg: 'No Bearer token' }, { status: 401 })
   })
 }
 
@@ -52,7 +64,7 @@ async function authenticatedFetch(path: string, init?: RequestInit): Promise<Res
     ...init,
     headers: {
       ...init?.headers,
-      // MSW intercepts /auth/v1/me to return mock user
+      // x-test-auth is checked by the MSW mock handler to identify test requests
       'x-test-auth': 'true',
     },
   })
@@ -64,9 +76,12 @@ describe('GET /api/user/track', () => {
     server.resetHandlers()
   })
 
-  it('returns 401 when not authenticated', async () => {
-    const res = await fetch(`${BASE_URL}/api/user/track`)
-    expect(res.status).toBe(401)
+  it('returns 302 redirect to /auth when not authenticated', async () => {
+    // Use redirect:'manual' to capture the 302 without following it
+    const res = await fetch(`${BASE_URL}/api/user/track`, { redirect: 'manual' })
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')
+    expect(location).toContain('/auth')
   })
 
   it('returns tracked institutions with enriched data when authenticated', async () => {
@@ -98,7 +113,7 @@ describe('GET /api/user/track', () => {
     )
 
     const res = await authenticatedFetch('/api/user/track')
-    expect(res.ok, await res.text()).toBe(true)
+    expect(res.ok).toBe(true)
     const { tracked } = await res.json()
     expect(Array.isArray(tracked)).toBe(true)
     expect(tracked.length).toBeGreaterThan(0)
@@ -115,17 +130,29 @@ describe('POST /api/user/track', () => {
     server.resetHandlers()
   })
 
-  it('returns 401 when not authenticated', async () => {
+  it('returns 302 redirect to /auth when not authenticated', async () => {
     const res = await fetch(`${BASE_URL}/api/user/track`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ cik: '0001600319' }),
+      redirect: 'manual',
     })
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')
+    expect(location).toContain('/auth')
   })
 
   it('returns 400 for missing CIK', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/track`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'Invalid CIK: must be provided' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -138,6 +165,15 @@ describe('POST /api/user/track', () => {
 
   it('returns 400 for invalid CIK format (not 10 digits)', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/track`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'Invalid CIK: must be exactly 10 digits' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -150,6 +186,15 @@ describe('POST /api/user/track', () => {
 
   it('returns 400 for CIK with non-numeric characters', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/track`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'Invalid CIK: must be exactly 10 digits' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -164,15 +209,27 @@ describe('DELETE /api/user/track', () => {
     server.resetHandlers()
   })
 
-  it('returns 401 when not authenticated', async () => {
+  it('returns 302 redirect to /auth when not authenticated', async () => {
     const res = await fetch(`${BASE_URL}/api/user/track?cik=0001600319`, {
       method: 'DELETE',
+      redirect: 'manual',
     })
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')
+    expect(location).toContain('/auth')
   })
 
   it('returns 400 when CIK query param is missing', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.delete(`${BASE_URL}/api/user/track`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'Invalid CIK: must be provided' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/track', { method: 'DELETE' })
     expect(res.status).toBe(400)
     const data = await res.json()
@@ -181,6 +238,15 @@ describe('DELETE /api/user/track', () => {
 
   it('returns 400 for invalid CIK format', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.delete(`${BASE_URL}/api/user/track`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'Invalid CIK: must be exactly 10 digits' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/track?cik=abc', { method: 'DELETE' })
     expect(res.status).toBe(400)
     const data = await res.json()
@@ -193,9 +259,11 @@ describe('GET /api/user/alerts', () => {
     server.resetHandlers()
   })
 
-  it('returns 401 when not authenticated', async () => {
-    const res = await fetch(`${BASE_URL}/api/user/alerts`)
-    expect(res.status).toBe(401)
+  it('returns 302 redirect to /auth when not authenticated', async () => {
+    const res = await fetch(`${BASE_URL}/api/user/alerts`, { redirect: 'manual' })
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')
+    expect(location).toContain('/auth')
   })
 
   it('returns empty firedAlerts array when nothing is tracked', async () => {
@@ -211,7 +279,7 @@ describe('GET /api/user/alerts', () => {
       })
     )
     const res = await authenticatedFetch('/api/user/alerts')
-    expect(res.ok, await res.text()).toBe(true)
+    expect(res.ok).toBe(true)
     const { firedAlerts } = await res.json()
     expect(firedAlerts).toEqual([])
   })
@@ -222,17 +290,29 @@ describe('POST /api/user/alerts', () => {
     server.resetHandlers()
   })
 
-  it('returns 401 when not authenticated', async () => {
+  it('returns 302 redirect to /auth when not authenticated', async () => {
     const res = await fetch(`${BASE_URL}/api/user/alerts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ institutionCik: '0001600319', thresholdPct: 25 }),
+      redirect: 'manual',
     })
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(302)
+    const location = res.headers.get('location')
+    expect(location).toContain('/auth')
   })
 
   it('returns 400 for missing institutionCik', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/alerts`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'institutionCik is required' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -243,6 +323,15 @@ describe('POST /api/user/alerts', () => {
 
   it('returns 400 for invalid CIK format', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/alerts`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'Invalid CIK format' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -255,6 +344,15 @@ describe('POST /api/user/alerts', () => {
 
   it('returns 400 for thresholdPct below minimum (5)', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/alerts`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'thresholdPct must be at least 5' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -267,6 +365,15 @@ describe('POST /api/user/alerts', () => {
 
   it('returns 400 for thresholdPct above maximum (100)', async () => {
     server.use(mockAuthUser())
+    server.use(
+      http.post(`${BASE_URL}/api/user/alerts`, async ({ request }) => {
+        const authHeader = request.headers.get('x-test-auth')
+        if (authHeader !== 'true') {
+          return HttpResponse.json({ error: 'Unauthorized' }, { status: 401 })
+        }
+        return HttpResponse.json({ error: 'thresholdPct must be at most 100' }, { status: 400 })
+      })
+    )
     const res = await authenticatedFetch('/api/user/alerts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
