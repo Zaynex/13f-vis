@@ -251,20 +251,21 @@ export default function InstitutionPage() {
         }
       }
 
-      // If this page was reached via OAuth callback redirect, the session cookie
-      // was just set server-side but client-side getUser() may not see it yet.
-      // Wait for onAuthStateChange to fire before replaying.
-      if (isOAuthCallback) {
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-          if (session?.user) {
-            subscription.unsubscribe()
-            doReplay()
+      // Always subscribe to auth state to avoid subscription leaks.
+      // Conditionally replay based on whether this is an OAuth callback.
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (session?.user) {
+          subscription.unsubscribe()
+          doReplay()
+          // Remove oauth_complete from URL so it doesn't persist on shared links
+          if (isOAuthCallback) {
+            const url = new URL(window.location.href)
+            url.searchParams.delete('oauth_complete')
+            window.history.replaceState({}, '', url.pathname + url.search)
           }
-        })
-        return () => subscription.unsubscribe()
-      } else {
-        doReplay()
-      }
+        }
+      })
+      return () => subscription.unsubscribe()
     } catch {
       sessionStorage.removeItem('pendingTrackAction')
     }

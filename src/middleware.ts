@@ -40,7 +40,9 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth'
     url.searchParams.set('next', pathname)
-    return NextResponse.redirect(url)
+    // Use 302 (not 307) so POST becomes GET — /auth page is a client
+    // component with no POST handler, so 307 would return 405.
+    return NextResponse.redirect(url, 302)
   }
 
   return supabaseResponse
