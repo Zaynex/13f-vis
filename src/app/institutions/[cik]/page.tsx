@@ -17,6 +17,7 @@ import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { HoldingsTable } from '@/components/HoldingsTable'
 import { HoldingsPieChart } from '@/components/HoldingsPieChart'
+import { UserMenu } from '@/components/UserMenu'
 import type { ChangeType } from '@prisma/client'
 import { supabase } from '@/lib/supabase'
 
@@ -301,6 +302,7 @@ export default function InstitutionPage() {
             >
               {isTracking ? '…' : isTracked ? '✓ Tracked' : '+ Track Fund'}
             </button>
+            <UserMenu />
           </div>
         </div>
 

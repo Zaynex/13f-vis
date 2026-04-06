@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import { UserMenu } from '@/components/UserMenu'
 
 interface Institution {
   cik: string
@@ -55,7 +56,10 @@ export default function HomePage() {
   )
 
   return (
-    <main className="flex min-h-screen flex-col items-center px-4 pt-24">
+    <main className="relative flex min-h-screen flex-col items-center px-4 pt-24">
+      <div className="absolute top-6 right-6">
+        <UserMenu />
+      </div>
       {/* Hero */}
       <div className="w-full max-w-xl text-center">
         <div className="mb-3 text-5xl">📊</div>
