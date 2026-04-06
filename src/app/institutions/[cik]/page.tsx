@@ -156,6 +156,8 @@ export default function InstitutionPage() {
   async function handleTrackToggle() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) {
+      // Store intended action so we can replay it after login
+      sessionStorage.setItem('pendingTrackAction', JSON.stringify({ cik, action: isTracked ? 'untrack' : 'track' }))
       router.push(`/auth?next=/institutions/${cik}`)
       return
     }
@@ -216,15 +218,35 @@ export default function InstitutionPage() {
         }
       })
       .catch(() => {})
-    // Check if tracked
+    // Check if tracked (API returns institutionCik in camelCase)
     fetch('/api/user/track')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (d?.tracked) {
-          setIsTracked(d.tracked.some((t: { institution_cik: string }) => t.institution_cik === cik))
+          setIsTracked(d.tracked.some((t: { institutionCik: string }) => t.institutionCik === cik))
         }
       })
       .catch(() => {})
+
+    // Replay pending track action after login redirect (sessionStorage is cleared after replay)
+    const pending = sessionStorage.getItem('pendingTrackAction')
+    if (pending) {
+      try {
+        const { action } = JSON.parse(pending) as { cik: string; action: 'track' | 'untrack' }
+        sessionStorage.removeItem('pendingTrackAction')
+        if (action === 'track') {
+          fetch('/api/user/track', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cik }),
+          }).then(r => r.ok && setIsTracked(true))
+        } else {
+          fetch(`/api/user/track?cik=${cik}`, { method: 'DELETE' }).then(r => r.ok && setIsTracked(false))
+        }
+      } catch {
+        sessionStorage.removeItem('pendingTrackAction')
+      }
+    }
   }, [cik, fetchHoldings])
 
   if (!data && !isLoading) {
