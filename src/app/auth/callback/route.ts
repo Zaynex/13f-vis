@@ -26,5 +26,5 @@ export async function GET(request: NextRequest) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  return NextResponse.redirect(`${origin}${next}`)
+  return NextResponse.redirect(`${origin}${next}${next.includes('?') ? '&' : '?'}oauth_complete=1`)
 }

@@ -13,7 +13,7 @@
 // - Link to compare view
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter, useParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { HoldingsTable } from '@/components/HoldingsTable'
 import { HoldingsPieChart } from '@/components/HoldingsPieChart'
@@ -145,7 +145,9 @@ function FilingBanner({ filing, priorQuarter }: { filing: PageData['filing']; pr
 export default function InstitutionPage() {
   const router = useRouter()
   const params = useParams()
+  const searchParams = useSearchParams()
   const cik = params.cik as string
+  const isOAuthCallback = searchParams.get('oauth_complete') === '1'
 
   const [data, setData] = useState<PageData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -231,10 +233,13 @@ export default function InstitutionPage() {
 
     // Replay pending track action after login redirect (sessionStorage is cleared after replay)
     const pending = sessionStorage.getItem('pendingTrackAction')
-    if (pending) {
-      try {
-        const { action } = JSON.parse(pending) as { cik: string; action: 'track' | 'untrack' }
-        sessionStorage.removeItem('pendingTrackAction')
+    if (!pending) return
+
+    try {
+      const { action } = JSON.parse(pending) as { cik: string; action: 'track' | 'untrack' }
+      sessionStorage.removeItem('pendingTrackAction')
+
+      function doReplay() {
         if (action === 'track') {
           fetch('/api/user/track', {
             method: 'POST',
@@ -244,11 +249,26 @@ export default function InstitutionPage() {
         } else {
           fetch(`/api/user/track?cik=${cik}`, { method: 'DELETE' }).then(r => r.ok && setIsTracked(false))
         }
-      } catch {
-        sessionStorage.removeItem('pendingTrackAction')
       }
+
+      // If this page was reached via OAuth callback redirect, the session cookie
+      // was just set server-side but client-side getUser() may not see it yet.
+      // Wait for onAuthStateChange to fire before replaying.
+      if (isOAuthCallback) {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (session?.user) {
+            subscription.unsubscribe()
+            doReplay()
+          }
+        })
+        return () => subscription.unsubscribe()
+      } else {
+        doReplay()
+      }
+    } catch {
+      sessionStorage.removeItem('pendingTrackAction')
     }
-  }, [cik, fetchHoldings])
+  }, [cik, fetchHoldings, isOAuthCallback])
 
   if (!data && !isLoading) {
     return (
