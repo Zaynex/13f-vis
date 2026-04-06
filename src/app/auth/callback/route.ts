@@ -24,24 +24,32 @@ export async function GET(request: NextRequest) {
         },
       }
     )
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
     console.log('=== OAuth callback debug ===')
     console.log('code present:', !!code)
     console.log('error:', error ? error.message : 'none')
-    console.log('supabaseResponse type:', supabaseResponse.constructor.name)
+    console.log('sessionData:', sessionData ? 'session present' : 'null')
     console.log('cookies after exchange:', supabaseResponse.cookies.getAll().map(c => `${c.name}=${c.value.substring(0, 20)}...`))
-    if (!error) {
-      // Build redirect first so we can attach cookies to it.
+    if (!error && sessionData?.session) {
+      const { session } = sessionData
+      // Explicitly set the session cookies on the redirect response.
+      // This bypasses any issues with the setAll callback not persisting properly.
       const url = new URL(`${origin}${next}`)
       url.searchParams.set('oauth_complete', '1')
       const redirect = NextResponse.redirect(url.toString(), 302)
-      // Copy session cookies (set on supabaseResponse by exchangeCodeForSession) onto the redirect.
-      const cookies = supabaseResponse.cookies.getAll()
-      console.log('setting cookies on redirect:', cookies.map(c => c.name))
-      console.log('cookie values:', cookies.map(c => `${c.name}=${c.value.substring(0, 30)}...`))
-      cookies.forEach((c) => {
-        redirect.cookies.set(c.name, c.value, c)
+      const cookieOptions = {
+        maxAge: session.expires_in ?? 3600,
+        sameSite: 'lax' as const,
+        secure: true,
+        path: '/',
+        httpOnly: true,
+      }
+      redirect.cookies.set('sb-access-token', session.access_token, cookieOptions)
+      redirect.cookies.set('sb-refresh-token', session.refresh_token, {
+        ...cookieOptions,
+        maxAge: 30 * 24 * 60 * 60, // 30 days for refresh token
       })
+      console.log('setting explicit cookies on redirect:', 'sb-access-token', 'sb-refresh-token')
       return redirect
     }
   }
