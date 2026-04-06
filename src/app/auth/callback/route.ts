@@ -24,13 +24,27 @@ export async function GET(request: NextRequest) {
         },
       }
     )
-    const { error } = await supabase.auth.exchangeCodeForSession(code)
-    if (!error) {
-      // Session cookies are now set on supabaseResponse via setAll.
-      // Use it as the base for the redirect so cookies reach the browser.
+    const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error && sessionData?.session) {
+      const { session } = sessionData
+      // Explicitly set the session cookies on the redirect response.
+      // This bypasses any issues with the setAll callback not persisting properly.
       const url = new URL(`${origin}${next}`)
       url.searchParams.set('oauth_complete', '1')
-      return NextResponse.redirect(url.toString(), 302)
+      const redirect = NextResponse.redirect(url.toString(), 302)
+      const cookieOptions = {
+        maxAge: session.expires_in ?? 3600,
+        sameSite: 'lax' as const,
+        secure: true,
+        path: '/',
+        httpOnly: true,
+      }
+      redirect.cookies.set('sb-access-token', session.access_token, cookieOptions)
+      redirect.cookies.set('sb-refresh-token', session.refresh_token, {
+        ...cookieOptions,
+        maxAge: 30 * 24 * 60 * 60, // 30 days for refresh token
+      })
+      return redirect
     }
   }
 
