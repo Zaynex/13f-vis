@@ -28,7 +28,8 @@ export async function GET(request: NextRequest) {
     console.log('=== OAuth callback debug ===')
     console.log('code present:', !!code)
     console.log('error:', error ? error.message : 'none')
-    console.log('cookies after exchange:', supabaseResponse.cookies.getAll().map(c => c.name))
+    console.log('supabaseResponse type:', supabaseResponse.constructor.name)
+    console.log('cookies after exchange:', supabaseResponse.cookies.getAll().map(c => `${c.name}=${c.value.substring(0, 20)}...`))
     if (!error) {
       // Build redirect first so we can attach cookies to it.
       const url = new URL(`${origin}${next}`)
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
       // Copy session cookies (set on supabaseResponse by exchangeCodeForSession) onto the redirect.
       const cookies = supabaseResponse.cookies.getAll()
       console.log('setting cookies on redirect:', cookies.map(c => c.name))
+      console.log('cookie values:', cookies.map(c => `${c.name}=${c.value.substring(0, 30)}...`))
       cookies.forEach((c) => {
         redirect.cookies.set(c.name, c.value, c)
       })
