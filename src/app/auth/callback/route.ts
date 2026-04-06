@@ -25,11 +25,6 @@ export async function GET(request: NextRequest) {
       }
     )
     const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
-    console.log('=== OAuth callback debug ===')
-    console.log('code present:', !!code)
-    console.log('error:', error ? error.message : 'none')
-    console.log('sessionData:', sessionData ? 'session present' : 'null')
-    console.log('cookies after exchange:', supabaseResponse.cookies.getAll().map(c => `${c.name}=${c.value.substring(0, 20)}...`))
     if (!error && sessionData?.session) {
       const { session } = sessionData
       // Explicitly set the session cookies on the redirect response.
@@ -49,7 +44,6 @@ export async function GET(request: NextRequest) {
         ...cookieOptions,
         maxAge: 30 * 24 * 60 * 60, // 30 days for refresh token
       })
-      console.log('setting explicit cookies on redirect:', 'sb-access-token', 'sb-refresh-token')
       return redirect
     }
   }
