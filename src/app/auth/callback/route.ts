@@ -26,11 +26,15 @@ export async function GET(request: NextRequest) {
     )
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
-      // Session cookies are now set on supabaseResponse via setAll.
-      // Use it as the base for the redirect so cookies reach the browser.
+      // Build redirect first so we can attach cookies to it.
       const url = new URL(`${origin}${next}`)
       url.searchParams.set('oauth_complete', '1')
-      return NextResponse.redirect(url.toString(), 302)
+      const redirect = NextResponse.redirect(url.toString(), 302)
+      // Copy session cookies (set on supabaseResponse by exchangeCodeForSession) onto the redirect.
+      supabaseResponse.cookies.getAll().forEach((c) => {
+        redirect.cookies.set(c.name, c.value, c)
+      })
+      return redirect
     }
   }
 
