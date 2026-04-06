@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.5.0.5] - 2026-04-06
+
+### Fixed
+- **Auth redirect 405** — middleware now uses 302 (not 307) when redirecting unauthenticated POST requests to `/auth`. 307 preserves the POST method, but `/auth` is a client component with no POST handler, causing 405 Method Not Allowed. The 302 converts POST→GET, which is correct for a login page.
+- **Track action replay after OAuth** — after Google OAuth login, the pending track action is now reliably replayed. Previously, the session cookie set server-side wasn't visible to `getUser()` immediately, so replaying failed silently. Now waits for `onAuthStateChange` to fire with a valid session before replaying.
+- **Subscription leak in OAuth replay** — `onAuthStateChange` subscription is now always unsubscribed after replay, regardless of the auth path taken.
+- **OAuth marker persisting in URL** — `oauth_complete=1` is now removed from the URL after the track action replay completes, preventing it from appearing in shared links.
+
+### Changed
+- **UserMenu component** — adds post-login avatar + dropdown with email and sign out to homepage and institution page header.
+
 ## [0.5.0.4] - 2026-04-01
 
 ### Fixed
