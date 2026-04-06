@@ -68,11 +68,7 @@ export async function POST(request: NextRequest) {
     { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
   )
 
-  const cookies = request.cookies.getAll()
-  console.log('=== POST /api/user/track debug ===')
-  console.log('cookies received:', cookies.map(c => c.name))
-  const { data: { user }, error: userError } = await supabase.auth.getUser()
-  console.log('getUser result:', user ? `user: ${user.id}` : 'null', 'error:', userError?.message ?? 'none')
+  const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
