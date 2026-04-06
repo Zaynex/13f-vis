@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function GET(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request })
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const next = searchParams.get('next') ?? '/watchlist'
@@ -16,15 +17,22 @@ export async function GET(request: NextRequest) {
             return request.cookies.getAll()
           },
           setAll(cookiesToSet) {
-            cookiesToSet.forEach(({ name, value }) =>
-              request.cookies.set(name, value)
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
             )
           },
         },
       }
     )
-    await supabase.auth.exchangeCodeForSession(code)
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      // Session cookies are now set on supabaseResponse via setAll.
+      // Use it as the base for the redirect so cookies reach the browser.
+      const url = new URL(`${origin}${next}`)
+      url.searchParams.set('oauth_complete', '1')
+      return NextResponse.redirect(url.toString(), 302)
+    }
   }
 
-  return NextResponse.redirect(`${origin}${next}${next.includes('?') ? '&' : '?'}oauth_complete=1`)
+  return NextResponse.redirect(`${origin}/auth`, 302)
 }
