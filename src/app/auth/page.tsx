@@ -27,6 +27,8 @@ function AuthForm() {
       })
     }
   }, [])
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setMessage(null)
@@ -47,7 +49,7 @@ function AuthForm() {
       })
       const result = await res.json()
       if (res.ok && result.success) {
-        // Set session in browser Supabase client so UI updates immediately
+        // Set session in browser Supabase client so UI updates immediately.
         if (result.session) {
           await supabase.auth.setSession({
             access_token: result.session.access_token,
