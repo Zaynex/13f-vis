@@ -2,16 +2,30 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
-// ─── GET: Return tracked institutions with enriched institution + latest filing data ─────
-// Replaces N+1 pattern where the watchlist page fetched each institution separately.
-// Returns all data in one query so the UI doesn't need parallel /api/tracker calls.
-
-export async function GET(request: NextRequest) {
-  const supabase = createServerClient(
+function createServerSupabaseClient(request: NextRequest) {
+  let supabaseResponse = NextResponse.next({ request })
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options)
+          )
+        },
+      },
+    }
   )
+}
+
+// ─── GET: Return tracked institutions with enriched institution + latest filing data ─────
+
+export async function GET(request: NextRequest) {
+  const supabase = createServerSupabaseClient(request)
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -62,11 +76,7 @@ export async function GET(request: NextRequest) {
 // Uses Prisma to unify with the alerts route — both write to the same table.
 
 export async function POST(request: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
-  )
+  const supabase = createServerSupabaseClient(request)
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
@@ -106,11 +116,7 @@ export async function POST(request: NextRequest) {
 // ─── DELETE: Untrack an institution ──────────────────────────────────────────
 
 export async function DELETE(request: NextRequest) {
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => request.cookies.getAll(), setAll: (c) => c.forEach(({ name, value }) => request.cookies.set(name, value)) } },
-  )
+  const supabase = createServerSupabaseClient(request)
 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
