@@ -37,11 +37,14 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith('/api/user')
 
   if (isProtected && !user) {
+    // For API routes, return 401 JSON so clients can handle the auth error.
+    // For page routes (e.g. /watchlist), redirect to the login page.
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     const url = request.nextUrl.clone()
     url.pathname = '/auth'
     url.searchParams.set('next', pathname)
-    // Use 302 (not 307) so POST becomes GET — /auth page is a client
-    // component with no POST handler, so 307 would return 405.
     return NextResponse.redirect(url, 302)
   }
 

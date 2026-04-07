@@ -29,12 +29,25 @@ function AuthForm() {
         setMessage({ type: 'success', text: 'Check your email for a confirmation link.' })
       }
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setMessage({ type: 'error', text: error.message })
-      } else {
+      // Use the server-side sign-in API to set HTTP-only session cookies.
+      const res = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const result = await res.json()
+      if (res.ok && result.success) {
+        // Set session in browser Supabase client so UI updates immediately
+        if (result.session) {
+          await supabase.auth.setSession({
+            access_token: result.session.access_token,
+            refresh_token: result.session.refresh_token,
+          })
+        }
         router.push(next)
         router.refresh()
+      } else {
+        setMessage({ type: 'error', text: result.error ?? 'Login failed' })
       }
     }
 

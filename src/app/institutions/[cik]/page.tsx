@@ -154,6 +154,7 @@ export default function InstitutionPage() {
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null)
   const [quarters, setQuarters] = useState<string[]>([])
   const [isTracked, setIsTracked] = useState(false)
+  const [isCheckingTracked, setIsCheckingTracked] = useState(true)
   const [isTracking, setIsTracking] = useState(false)
 
   async function handleTrackToggle() {
@@ -230,6 +231,7 @@ export default function InstitutionPage() {
         }
       })
       .catch(() => {})
+      .finally(() => setIsCheckingTracked(false))
 
     // Replay pending track action after login redirect (sessionStorage is cleared after replay)
     const pending = sessionStorage.getItem('pendingTrackAction')
@@ -314,14 +316,14 @@ export default function InstitutionPage() {
             </Link>
             <button
               onClick={handleTrackToggle}
-              disabled={isTracking}
+              disabled={isCheckingTracked || isTracking}
               className={`inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
                 isTracked
                   ? 'border-emerald-600 bg-emerald-950 text-emerald-400 hover:border-emerald-500'
                   : 'border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]'
               }`}
             >
-              {isTracking ? '…' : isTracked ? '✓ Tracked' : '+ Track Fund'}
+              {isCheckingTracked ? '…' : isTracking ? '…' : isTracked ? '✓ Tracked' : '+ Track Fund'}
             </button>
             <UserMenu />
           </div>
