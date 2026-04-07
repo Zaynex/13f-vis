@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
   const callbackUrl = new URL(`${origin}/auth`)
   callbackUrl.searchParams.set('access_token', sessionData.session.access_token)
   callbackUrl.searchParams.set('refresh_token', sessionData.session.refresh_token)
-  callbackUrl.searchParams.set('next', next)
+  callbackUrl.searchParams.set('next', next ?? '/watchlist')
 
   if (capturedCookies.length > 0) {
     const finalResponse = NextResponse.redirect(callbackUrl.toString(), 302)
