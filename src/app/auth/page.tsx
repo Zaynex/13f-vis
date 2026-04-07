@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, Suspense, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -16,7 +16,17 @@ function AuthForm() {
   const searchParams = useSearchParams()
   const next = searchParams.get('next') ?? '/watchlist'
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Handle OAuth callback: set session from tokens in URL.
+  useEffect(() => {
+    const accessToken = searchParams.get('access_token')
+    const refreshToken = searchParams.get('refresh_token')
+    if (accessToken && refreshToken) {
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken }).then(() => {
+        router.push(next)
+        router.refresh()
+      })
+    }
+  }, [])
     e.preventDefault()
     setLoading(true)
     setMessage(null)

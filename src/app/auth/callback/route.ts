@@ -13,9 +13,10 @@ export async function GET(request: NextRequest) {
   }
 
   const url = new URL(`${origin}${next}`)
-  url.searchParams.set('oauth_complete', '1')
 
-  // Build a basic redirect response — we'll add cookies after exchangeCodeForSession.
+  // Capture cookies set by Supabase so we can re-apply them to the final response.
+  let capturedCookies: Array<{ name: string; value: string; options?: object }> = []
+
   const redirectResponse = NextResponse.redirect(url.toString(), 302)
 
   const supabase = createServerClient(
@@ -27,6 +28,7 @@ export async function GET(request: NextRequest) {
           return request.cookies.getAll()
         },
         setAll(cookiesToSet) {
+          capturedCookies = cookiesToSet
           cookiesToSet.forEach(({ name, value, options }) =>
             redirectResponse.cookies.set(name, value, options)
           )
@@ -41,5 +43,23 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/auth`, 302)
   }
 
-  return redirectResponse
+  // Encode session tokens in the URL so the destination page can set localStorage.
+  // This is needed because OAuth only sets HTTP-only cookies server-side;
+  // the browser Supabase client still needs the session to show logged-in UI.
+  // Redirect to /auth with session tokens so the browser can set localStorage.
+  // The auth page will read the tokens, call setSession, then redirect to `next`.
+  const callbackUrl = new URL(`${origin}/auth`)
+  callbackUrl.searchParams.set('access_token', sessionData.session.access_token)
+  callbackUrl.searchParams.set('refresh_token', sessionData.session.refresh_token)
+  callbackUrl.searchParams.set('next', next)
+
+  if (capturedCookies.length > 0) {
+    const finalResponse = NextResponse.redirect(callbackUrl.toString(), 302)
+    capturedCookies.forEach(({ name, value, options }) =>
+      finalResponse.cookies.set(name, value, options)
+    )
+    return finalResponse
+  }
+
+  return NextResponse.redirect(callbackUrl.toString(), 302)
 }
