@@ -26,25 +26,13 @@ export async function GET(request: NextRequest) {
     )
     const { data: sessionData, error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error && sessionData?.session) {
-      const { session } = sessionData
-      // Explicitly set the session cookies on the redirect response.
-      // This bypasses any issues with the setAll callback not persisting properly.
+      // Let Supabase's setAll handle cookie-setting (includes non-httpOnly cookies
+      // that the browser client needs for getUser() to work).
+      // We just add the oauth_complete flag so the destination page knows to
+      // wait for onAuthStateChange before replaying the pending action.
       const url = new URL(`${origin}${next}`)
       url.searchParams.set('oauth_complete', '1')
-      const redirect = NextResponse.redirect(url.toString(), 302)
-      const cookieOptions = {
-        maxAge: session.expires_in ?? 3600,
-        sameSite: 'lax' as const,
-        secure: true,
-        path: '/',
-        httpOnly: true,
-      }
-      redirect.cookies.set('sb-access-token', session.access_token, cookieOptions)
-      redirect.cookies.set('sb-refresh-token', session.refresh_token, {
-        ...cookieOptions,
-        maxAge: 30 * 24 * 60 * 60, // 30 days for refresh token
-      })
-      return redirect
+      return NextResponse.redirect(url.toString(), 302)
     }
   }
 
