@@ -32,7 +32,8 @@ export async function GET(request: NextRequest) {
       // wait for onAuthStateChange before replaying the pending action.
       const url = new URL(`${origin}${next}`)
       url.searchParams.set('oauth_complete', '1')
-      return NextResponse.redirect(url.toString(), 302)
+      // Use supabaseResponse.redirect() so cookies set via setAll are included
+      return supabaseResponse.redirect(url.toString(), 302)
     }
   }
 
