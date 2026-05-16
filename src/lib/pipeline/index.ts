@@ -800,6 +800,9 @@ async function upsertFilingAndHoldings(
         changePercent: h.changePercent,
       })),
     })
+  }, {
+    maxWait: 10_000,
+    timeout: 30_000,
   })
 }
 
