@@ -91,7 +91,7 @@ model Holding {
   adjustedShares        BigInt
   priorAdjustedShares  BigInt?
   changeType            ChangeType @default(UNCHANGED)
-  changePercent         Decimal?   @db.Decimal(8, 2)
+  changePercent         Decimal?   @db.Decimal(18, 2)
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
   filing               Filing      @relation(fields: [filingId], references: [id])

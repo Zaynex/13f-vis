@@ -95,9 +95,11 @@ export function parseHtmlFiling(
       const cols = detectColumnIndices(headers)
       if (!cols) continue
 
-      // Parse data rows (skip header rows - up to 4 rows)
+      // Parse all rows. Header/label rows naturally fail the CUSIP/value checks,
+      // while some SEC rendered tables start real holdings inside the first
+      // four rows that were used for header detection.
       let parsedCount = 0
-      for (let i = 4; i < rows.length; i++) {
+      for (let i = 0; i < rows.length; i++) {
         const cells = $(rows[i]).find('td')
         if (cells.length === 0) continue
 

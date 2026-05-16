@@ -36,7 +36,7 @@ CREATE TABLE "Holding" (
     "adjustedShares" INTEGER NOT NULL,
     "priorAdjustedShares" INTEGER,
     "changeType" "ChangeType" NOT NULL DEFAULT 'UNCHANGED',
-    "changePercent" DECIMAL(8,2),
+    "changePercent" DECIMAL(18,2),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "Holding_pkey" PRIMARY KEY ("id")
