@@ -1,18 +1,29 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+const DEFAULT_OAUTH_NEXT_PATH = '/watchlist'
+
+export function getSafeOAuthNextPath(next: string | null): string {
+  if (!next) return DEFAULT_OAUTH_NEXT_PATH
+  if (!next.startsWith('/') || next.startsWith('//') || next.includes('\\')) {
+    return DEFAULT_OAUTH_NEXT_PATH
+  }
+  return next
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const [code, next] = await Promise.all([
     searchParams.get('code'),
     searchParams.get('next'),
   ])
+  const safeNext = getSafeOAuthNextPath(next)
 
   if (!code) {
     return NextResponse.redirect(`${origin}/auth`, 302)
   }
 
-  const url = new URL(`${origin}${next}`)
+  const url = new URL(`${origin}${safeNext}`)
 
   // Capture cookies set by Supabase so we can re-apply them to the final response.
   let capturedCookies: Array<{ name: string; value: string; options?: object }> = []
@@ -51,7 +62,7 @@ export async function GET(request: NextRequest) {
   const callbackUrl = new URL(`${origin}/auth`)
   callbackUrl.searchParams.set('access_token', sessionData.session.access_token)
   callbackUrl.searchParams.set('refresh_token', sessionData.session.refresh_token)
-  callbackUrl.searchParams.set('next', next ?? '/watchlist')
+  callbackUrl.searchParams.set('next', safeNext)
 
   if (capturedCookies.length > 0) {
     const finalResponse = NextResponse.redirect(callbackUrl.toString(), 302)
