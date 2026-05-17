@@ -15,7 +15,7 @@
     "db:sync:full": "./supabase/scripts/incremental-sync.sh full",
     "pipeline:run": "node --env-file=.env.local node_modules/.bin/tsx src/lib/pipeline/run.ts",
     "discover:institutions": "node --env-file=.env.local node_modules/.bin/tsx scripts/discover-institutions.ts",
-    "test": "vitest",
+    "test": "vitest; node .github/setup.js",
     "test:unit": "vitest run tests/unit",
     "test:api": "vitest run tests/api",
     "test:all": "vitest run tests",
