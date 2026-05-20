@@ -41,6 +41,7 @@ import { getSplitAdjustedShares } from './split-adjuster'
 import { calculateChangeBadge, ChangeBadge } from '../schema'
 import { FetchError, RateLimitError, NotFoundError } from '../errors'
 import { rateLimiter, withRetry } from './rate-limiter'
+import { mapWithConcurrency } from './concurrency'
 
 const prisma = new PrismaClient()
 
@@ -156,17 +157,15 @@ export async function runPipeline(
       cumulativeFactor: 1.0,
     }))
   } else {
-    // Process sequentially to respect the Polygon.io rate limit (5 req/min = 12s between calls).
-    // Each CUSIP result is cached after first lookup, so subsequent quarters are instant.
-    splitAdjustedHoldings = []
-    for (const h of rawHoldings) {
+    const splitConcurrency = Number(process.env.SPLIT_ADJUSTMENT_CONCURRENCY ?? 8)
+    splitAdjustedHoldings = await mapWithConcurrency(rawHoldings, splitConcurrency, async (h) => {
       const { adjustedShares, cumulativeFactor } = await getSplitAdjustedShares(
         h.cusip,
         h.shares,
         filingDate,
       )
-      splitAdjustedHoldings.push({ ...h, adjustedShares, cumulativeFactor })
-    }
+      return { ...h, adjustedShares, cumulativeFactor }
+    })
   }
 
   // 5. Compute changes vs prior quarter
@@ -174,46 +173,7 @@ export async function runPipeline(
   const priorHoldings = await getPriorQuarterHoldings(cik, meta.correctQuarter)
   const priorByCusip = new Map(priorHoldings.map((h) => [h.cusip, h.adjustedShares]))
 
-  // Aggregate by CUSIP: sum adjustedShares across all sub-advisor entries in the same filing.
-  // rawShares/rawValue are summed; cumulativeFactor is the same for all entries of the same CUSIP.
-  const aggregatedByCusip = new Map<string, { rawShares: number; rawValue: number; adjShares: number; name: string; cumFactor: number }>()
-  for (const h of splitAdjustedHoldings) {
-    const key = h.cusip
-    const existing = aggregatedByCusip.get(key)
-    if (existing) {
-      existing.rawShares += h.shares
-      existing.rawValue += h.value
-      existing.adjShares += h.adjustedShares
-    } else {
-      aggregatedByCusip.set(key, {
-        rawShares: h.shares,
-        rawValue: h.value,
-        adjShares: h.adjustedShares,
-        name: h.companyName,
-        cumFactor: h.cumulativeFactor,
-      })
-    }
-  }
-
-  const enrichedHoldings = [...aggregatedByCusip.entries()].map(([cusip, agg]) => {
-    const priorShares = priorByCusip.get(cusip) ?? null
-    const badge = calculateChangeBadge(agg.adjShares, priorShares)
-    const changePercent =
-      priorShares !== null && priorShares > 0
-        ? ((agg.adjShares - priorShares) / priorShares) * 100
-        : null
-    return {
-      cusip,
-      companyName: agg.name,
-      rawShares: agg.rawShares,
-      rawValue: agg.rawValue,
-      adjustedShares: agg.adjShares,
-      cumulativeFactor: agg.cumFactor,
-      priorAdjustedShares: priorShares,
-      changeType: badge,
-      changePercent,
-    }
-  })
+  const enrichedHoldings = aggregateSplitAdjustedHoldings(splitAdjustedHoldings, priorByCusip)
 
   // 6. Upsert to DB (or skip if dry-run)
   // Use correctQuarter — the authoritative quarter derived from periodOfReport,
@@ -741,11 +701,109 @@ interface EnrichedHolding {
   companyName: string
   rawShares: number
   rawValue: number
+  stockShares: number
+  stockValue: number
+  putShares: number
+  putValue: number
+  callShares: number
+  callValue: number
   adjustedShares: number
   cumulativeFactor: number
   priorAdjustedShares: number | null
   changeType: ChangeBadge
   changePercent: number | null
+}
+
+interface SplitAdjustedHolding {
+  cusip: string
+  companyName: string
+  shares: number
+  value: number
+  adjustedShares: number
+  cumulativeFactor: number
+  putCall?: 'PUT' | 'CALL' | null
+}
+
+interface AggregatedHolding {
+  rawShares: number
+  rawValue: number
+  stockShares: number
+  stockValue: number
+  putShares: number
+  putValue: number
+  callShares: number
+  callValue: number
+  adjustedShares: number
+  name: string
+  cumulativeFactor: number
+}
+
+export function aggregateSplitAdjustedHoldings(
+  holdings: SplitAdjustedHolding[],
+  priorByCusip: Map<string, number>,
+): EnrichedHolding[] {
+  const aggregatedByCusip = new Map<string, AggregatedHolding>()
+
+  for (const h of holdings) {
+    const existing = aggregatedByCusip.get(h.cusip)
+    const agg = existing ?? {
+      rawShares: 0,
+      rawValue: 0,
+      stockShares: 0,
+      stockValue: 0,
+      putShares: 0,
+      putValue: 0,
+      callShares: 0,
+      callValue: 0,
+      adjustedShares: 0,
+      name: h.companyName,
+      cumulativeFactor: h.cumulativeFactor,
+    }
+
+    agg.rawShares += h.shares
+    agg.rawValue += h.value
+    agg.adjustedShares += h.adjustedShares
+
+    if (h.putCall === 'PUT') {
+      agg.putShares += h.shares
+      agg.putValue += h.value
+    } else if (h.putCall === 'CALL') {
+      agg.callShares += h.shares
+      agg.callValue += h.value
+    } else {
+      agg.stockShares += h.shares
+      agg.stockValue += h.value
+    }
+
+    aggregatedByCusip.set(h.cusip, agg)
+  }
+
+  return [...aggregatedByCusip.entries()].map(([cusip, agg]) => {
+    const priorShares = priorByCusip.get(cusip) ?? null
+    const badge = calculateChangeBadge(agg.adjustedShares, priorShares)
+    const changePercent =
+      priorShares !== null && priorShares > 0
+        ? ((agg.adjustedShares - priorShares) / priorShares) * 100
+        : null
+
+    return {
+      cusip,
+      companyName: agg.name,
+      rawShares: agg.rawShares,
+      rawValue: agg.rawValue,
+      stockShares: agg.stockShares,
+      stockValue: agg.stockValue,
+      putShares: agg.putShares,
+      putValue: agg.putValue,
+      callShares: agg.callShares,
+      callValue: agg.callValue,
+      adjustedShares: agg.adjustedShares,
+      cumulativeFactor: agg.cumulativeFactor,
+      priorAdjustedShares: priorShares,
+      changeType: badge,
+      changePercent,
+    }
+  })
 }
 
 async function upsertFilingAndHoldings(
@@ -793,6 +851,12 @@ async function upsertFilingAndHoldings(
         companyName: h.companyName,
         rawShares: h.rawShares,
         rawValue: h.rawValue,
+        stockShares: h.stockShares,
+        stockValue: h.stockValue,
+        putShares: h.putShares,
+        putValue: h.putValue,
+        callShares: h.callShares,
+        callValue: h.callValue,
         cumulativeSplitFactor: h.cumulativeFactor,
         adjustedShares: h.adjustedShares,
         priorAdjustedShares: h.priorAdjustedShares,

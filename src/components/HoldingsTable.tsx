@@ -1,6 +1,6 @@
 // Holdings Table — displays a fund's current quarter positions
 //
-// Columns: Company | CUSIP | Shares | Value | Weight | Change
+// Columns: Company | CUSIP | Type | Shares | Value | Weight | Change
 // Sorted by: market value descending (largest positions first)
 //
 // Features:
@@ -17,6 +17,7 @@ const GLOSSARY = {
   cusip: 'CUSIP (Committee on Uniform Security Identification Procedures) — A 9-character unique identifier for each security. Used instead of company name because names vary across filers.',
   shares: 'Split-adjusted share count. Raw 13F counts are adjusted for stock splits to enable accurate quarter-over-quarter comparison.',
   value: 'Market value in USD. Calculated as shares × price-per-share on the filing date.',
+  type: '13F holding type. Stock means direct equity exposure; Put and Call are option positions reported in the filing.',
   change: 'Quarter-over-quarter change in shares. ▲ = increased >1%, ▼ = decreased >1%, ★ = new position, ✕ = exited.',
   etf: 'ETF (Exchange-Traded Fund) — A fund that trades on exchanges like a stock. One ETF ticker can represent dozens of underlying holdings.',
 }
@@ -26,6 +27,13 @@ export interface HoldingRow {
   companyName: string
   adjustedShares: number
   rawValue: number
+  stockShares?: number
+  stockValue?: number
+  putShares?: number
+  putValue?: number
+  callShares?: number
+  callValue?: number
+  optionSummary?: string
   weightPercent?: number | null
   changeType: ChangeType | 'UNCHANGED'
   changePercent: number | null
@@ -49,6 +57,39 @@ function formatValue(n: number): string {
   return `$${n.toLocaleString()}`
 }
 
+function getOptionParts(h: HoldingRow): string[] {
+  const parts: string[] = []
+  if ((h.stockShares ?? 0) > 0) parts.push('Stock')
+  if ((h.putShares ?? 0) > 0) parts.push('Put')
+  if ((h.callShares ?? 0) > 0) parts.push('Call')
+  if (parts.length > 0) return parts
+  if (h.optionSummary && h.optionSummary !== 'Unknown') return h.optionSummary.split(' + ')
+  return ['Unknown']
+}
+
+function OptionExposure({ holding }: { holding: HoldingRow }) {
+  const parts = getOptionParts(holding)
+  const classNameFor = (part: string) => {
+    if (part === 'Put') return 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+    if (part === 'Call') return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+    if (part === 'Stock') return 'border-sky-500/40 bg-sky-500/10 text-sky-300'
+    return 'border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)]'
+  }
+
+  return (
+    <div className="flex flex-wrap justify-start gap-1">
+      {parts.map((part) => (
+        <span
+          key={part}
+          className={`inline-flex min-w-0 items-center rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase leading-4 tracking-normal ${classNameFor(part)}`}
+        >
+          {part}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 function SkeletonRow() {
   return (
     <tr className="border-b border-[var(--border)]">
@@ -57,6 +98,9 @@ function SkeletonRow() {
       </td>
       <td className="px-3 py-3">
         <div className="h-4 w-20 animate-pulse rounded bg-[var(--muted)]" />
+      </td>
+      <td className="px-3 py-3">
+        <div className="h-4 w-16 animate-pulse rounded bg-[var(--muted)]" />
       </td>
       <td className="px-3 py-3 text-right">
         <div className="ml-auto h-4 w-16 animate-pulse rounded bg-[var(--muted)]" />
@@ -84,6 +128,9 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
               <th className="px-4 py-3 text-left font-medium text-[var(--muted-foreground)]">Company</th>
               <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
+              </th>
+              <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.type}>Type</InfoTooltip>
               </th>
               <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.shares}>Shares</InfoTooltip>
@@ -131,6 +178,9 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
               <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.cusip}>CUSIP</InfoTooltip>
               </th>
+              <th className="px-3 py-3 text-left font-medium text-[var(--muted-foreground)]">
+                <InfoTooltip term={GLOSSARY.type}>Type</InfoTooltip>
+              </th>
               <th className="px-3 py-3 text-right font-medium text-[var(--muted-foreground)]">
                 <InfoTooltip term={GLOSSARY.shares}>Shares</InfoTooltip>
               </th>
@@ -154,6 +204,9 @@ export function HoldingsTable({ holdings, isLoading }: HoldingsTableProps) {
                 <td className="px-4 py-3 font-medium">{h.companyName}</td>
                 <td className="px-3 py-3 font-mono text-xs text-[var(--muted-foreground)] tabular-nums">
                   {h.cusip}
+                </td>
+                <td className="px-3 py-3">
+                  <OptionExposure holding={h} />
                 </td>
                 <td className="px-3 py-3 text-right tabular-nums text-[var(--muted-foreground)]">
                   {formatShares(h.adjustedShares)}

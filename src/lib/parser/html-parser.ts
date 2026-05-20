@@ -10,7 +10,7 @@
 // - Nested tables sometimes appear (handle colspan/rowspan carefully)
 
 import * as cheerio from 'cheerio'
-import { ParsedHolding } from '../schema'
+import { normalizePutCall, ParsedHolding } from '../schema'
 import { ParseError } from '../errors'
 
 interface TableHeader {
@@ -27,19 +27,34 @@ function detectColumnIndices(headers: TableHeader[]): {
   companyIdx: number
   sharesIdx: number
   valueIdx: number
+  putCallIdx: number
 } | null {
   // We look for specific header text patterns across ALL header rows
   let cusipIdx = -1
   let companyIdx = -1
   let sharesIdx = -1
   let valueIdx = -1
+  let putCallIdx = -1
+  const headerTextByIndex = new Map<number, string>()
 
   for (const h of headers) {
     const t = h.text.toUpperCase()
+    const normalized = normalizeHeader(h.text)
+    headerTextByIndex.set(h.index, `${headerTextByIndex.get(h.index) ?? ''} ${normalized}`)
     if (t.includes('CUSIP') && cusipIdx === -1) cusipIdx = h.index
     if ((t.includes('SECURITY') || t.includes('NAME OF ISSUER') || t.includes('COMPANY')) && companyIdx === -1) companyIdx = h.index
     if ((t.includes('SHARES') || t.includes('SHRS') || t.includes('PRN AMT') || t.includes('STOCK')) && sharesIdx === -1) sharesIdx = h.index
     if (t.includes('VALUE') && valueIdx === -1) valueIdx = h.index
+    if ((t.includes('PUT/CALL') || normalized === 'PUTCALL') && putCallIdx === -1) putCallIdx = h.index
+  }
+
+  if (putCallIdx === -1) {
+    for (const [index, text] of headerTextByIndex.entries()) {
+      if (text.includes('PUT') && text.includes('CALL')) {
+        putCallIdx = index
+        break
+      }
+    }
   }
 
   // Require at minimum cusip and one of company/shares
@@ -55,6 +70,7 @@ function detectColumnIndices(headers: TableHeader[]): {
     companyIdx: companyIdx >= 0 ? companyIdx : 1,
     sharesIdx: sharesIdx >= 0 ? sharesIdx : 2,
     valueIdx: valueIdx >= 0 ? valueIdx : 3,
+    putCallIdx,
   }
 }
 
@@ -95,9 +111,11 @@ export function parseHtmlFiling(
       const cols = detectColumnIndices(headers)
       if (!cols) continue
 
-      // Parse data rows (skip header rows - up to 4 rows)
+      // Parse all rows. Header rows naturally drop out because they do not
+      // contain valid CUSIPs plus positive share/value data, and SEC XSL
+      // tables can start data before the fourth row.
       let parsedCount = 0
-      for (let i = 4; i < rows.length; i++) {
+      for (let i = 0; i < rows.length; i++) {
         const cells = $(rows[i]).find('td')
         if (cells.length === 0) continue
 
@@ -113,6 +131,9 @@ export function parseHtmlFiling(
         const cusip = cusipRaw.replace(/[^A-Z0-9]/gi, '').toUpperCase().padEnd(9, '0').slice(0, 9)
 
         const companyName = getCellText(cols.companyIdx) || 'UNKNOWN'
+        const putCall = cols.putCallIdx >= 0
+          ? normalizePutCall(getCellText(cols.putCallIdx))
+          : null
 
         // Shares: may have commas, parse as integer
         let shares = 0
@@ -132,7 +153,13 @@ export function parseHtmlFiling(
         }
 
         if (shares > 0 || value > 0) {
-          holdings.push({ cusip, companyName, shares, value })
+          holdings.push({
+            cusip,
+            companyName,
+            shares,
+            value,
+            ...(putCall ? { putCall } : {}),
+          })
           parsedCount++
         }
       }

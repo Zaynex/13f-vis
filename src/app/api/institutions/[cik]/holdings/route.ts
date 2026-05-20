@@ -7,6 +7,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { dynamicFetch, getAvailableQuartersForCik } from '@/lib/pipeline/dynamic-fetch'
 import { NotFoundError } from '@/lib/errors'
+import { calculateChangeBadge } from '@/lib/schema'
 
 // Quarter format: YYYY-QN where N is 1-4
 const QUARTER_REGEX = /^\d{4}-Q[1-4]$/
@@ -43,13 +44,46 @@ export async function GET(
       )
     }
 
+    let effectiveQuarter = quarter
+    let availableQuarters: string[] | null = null
+
+    if (!effectiveQuarter && fetchIfMissing) {
+      try {
+        availableQuarters = await getAvailableQuartersForCik(cik)
+        effectiveQuarter = availableQuarters[0]
+      } catch (err) {
+        console.error(`[api/institutions/${cik}/holdings] Latest quarter lookup failed:`, err)
+        return NextResponse.json(
+          { error: 'Failed to find latest 13F quarter from SEC EDGAR. Try again later.' },
+          { status: 500 },
+        )
+      }
+    }
+
+    if (!effectiveQuarter && !fetchIfMissing) {
+      const latestLocal = await prisma.filing.findFirst({
+        where: { institutionCik: cik },
+        orderBy: { filedAt: 'desc' },
+        include: {
+          holdings: {
+            orderBy: { rawValue: 'desc' },
+          },
+        },
+      })
+
+      if (latestLocal) {
+        const response = await buildHoldingsResponse(cik, latestLocal, institution.name)
+        return NextResponse.json(response)
+      }
+    }
+
     // Find the filing
     const filing = await prisma.filing.findFirst({
       where: {
         institutionCik: cik,
-        ...(quarter ? { quarter } : {}),
+        ...(effectiveQuarter ? { quarter: effectiveQuarter } : {}),
       },
-      orderBy: quarter ? undefined : { filedAt: 'desc' },
+      orderBy: effectiveQuarter ? undefined : { filedAt: 'desc' },
       include: {
         holdings: {
           orderBy: { rawValue: 'desc' },
@@ -59,16 +93,16 @@ export async function GET(
 
     if (!filing) {
       // No filing in DB — try dynamic fetch from SEC EDGAR
-      if (fetchIfMissing && quarter) {
+      if (fetchIfMissing && effectiveQuarter) {
         try {
-          await dynamicFetch(cik, quarter)
+          await dynamicFetch(cik, effectiveQuarter)
         } catch (err) {
           // dynamicFetch threw — SEC EDGAR doesn't have this quarter
           if (err instanceof NotFoundError) {
-            const available = await getAvailableQuartersForCik(cik)
+            const available = availableQuarters ?? await getAvailableQuartersForCik(cik)
             return NextResponse.json(
               {
-                error: `No 13F filing found for ${quarter} on SEC EDGAR`,
+                error: `No 13F filing found for ${effectiveQuarter} on SEC EDGAR`,
                 availableQuarters: available,
               },
               { status: 404 },
@@ -84,12 +118,14 @@ export async function GET(
 
         // Fetch succeeded — re-query DB
         const refetched = await prisma.filing.findFirst({
-          where: { institutionCik: cik, quarter },
+          where: { institutionCik: cik, quarter: effectiveQuarter },
           include: { holdings: { orderBy: { rawValue: 'desc' } } },
         })
 
         if (refetched) {
-          const response = await buildHoldingsResponse(cik, refetched, institution.name)
+          const response = await buildHoldingsResponse(cik, refetched, institution.name, {
+            fetchPriorIfMissing: fetchIfMissing,
+          })
           return NextResponse.json({ ...response, _fetched: true })
         }
       }
@@ -98,14 +134,16 @@ export async function GET(
         institution,
         filing: null,
         holdings: [],
-        message: quarter
-          ? `No filing found for ${quarter}`
+        message: effectiveQuarter
+          ? `No filing found for ${effectiveQuarter}`
           : 'No filings found for this institution',
       })
     }
 
     // Filing found — build response
-    const response = await buildHoldingsResponse(cik, filing, institution.name)
+    const response = await buildHoldingsResponse(cik, filing, institution.name, {
+      fetchPriorIfMissing: fetchIfMissing,
+    })
     return NextResponse.json(response)
   } catch (err) {
     console.error(`[api/institutions/${cik}/holdings] Error:`, err)
@@ -117,6 +155,7 @@ async function buildHoldingsResponse(
   cik: string,
   filing: import('@prisma/client').Filing & { holdings: import('@prisma/client').Holding[] },
   institutionName: string,
+  options: { fetchPriorIfMissing?: boolean } = {},
 ) {
   // Also fetch prior quarter for change comparison
   const [year, qPart] = filing.quarter.split('-Q')
@@ -124,24 +163,59 @@ async function buildHoldingsResponse(
   const priorQuarter =
     qNum === 1 ? `${parseInt(year) - 1}-Q4` : `${year}-Q${qNum - 1}`
 
-  const priorFiling = await prisma.filing.findUnique({
+  let priorFiling = await prisma.filing.findUnique({
     where: { institutionCik_quarter: { institutionCik: cik, quarter: priorQuarter } },
     include: { holdings: { select: { cusip: true, adjustedShares: true } } },
   })
+
+  if (!priorFiling && options.fetchPriorIfMissing) {
+    try {
+      await dynamicFetch(cik, priorQuarter)
+      priorFiling = await prisma.filing.findUnique({
+        where: { institutionCik_quarter: { institutionCik: cik, quarter: priorQuarter } },
+        include: { holdings: { select: { cusip: true, adjustedShares: true } } },
+      })
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) {
+        console.warn(`[api/institutions/${cik}/holdings] Prior quarter fetch failed for ${priorQuarter}:`, err)
+      }
+    }
+  }
 
   const priorByCusip = new Map(
     (priorFiling?.holdings ?? []).map((h) => [h.cusip, Number(h.adjustedShares)]),
   )
 
-  const holdings = filing.holdings.map((h) => ({
-    cusip: h.cusip,
-    companyName: h.companyName,
-    adjustedShares: Number(h.adjustedShares),
-    rawValue: Number(h.rawValue),
-    priorAdjustedShares: priorByCusip.get(h.cusip) ?? null,
-    changeType: h.changeType,
-    changePercent: h.changePercent ? Number(h.changePercent) : null,
-  }))
+  const holdings = filing.holdings.map((h) => {
+    const adjustedShares = Number(h.adjustedShares)
+    const priorAdjustedShares = priorByCusip.get(h.cusip) ?? null
+    const changeType = calculateChangeBadge(adjustedShares, priorAdjustedShares)
+    const changePercent =
+      priorAdjustedShares !== null && priorAdjustedShares > 0
+        ? ((adjustedShares - priorAdjustedShares) / priorAdjustedShares) * 100
+        : null
+
+    const stockShares = Number(h.stockShares)
+    const putShares = Number(h.putShares)
+    const callShares = Number(h.callShares)
+
+    return {
+      cusip: h.cusip,
+      companyName: h.companyName,
+      adjustedShares,
+      rawValue: Number(h.rawValue),
+      stockShares,
+      stockValue: Number(h.stockValue),
+      putShares,
+      putValue: Number(h.putValue),
+      callShares,
+      callValue: Number(h.callValue),
+      optionSummary: buildOptionSummary({ stockShares, putShares, callShares }),
+      priorAdjustedShares,
+      changeType,
+      changePercent,
+    }
+  })
 
   return {
     institution: { cik, name: institutionName },
@@ -154,4 +228,20 @@ async function buildHoldingsResponse(
     holdings,
     priorQuarter: priorFiling ? priorFiling.quarter : null,
   }
+}
+
+function buildOptionSummary({
+  stockShares,
+  putShares,
+  callShares,
+}: {
+  stockShares: number
+  putShares: number
+  callShares: number
+}): string {
+  const parts: string[] = []
+  if (stockShares > 0) parts.push('Stock')
+  if (putShares > 0) parts.push('Put')
+  if (callShares > 0) parts.push('Call')
+  return parts.length > 0 ? parts.join(' + ') : 'Unknown'
 }

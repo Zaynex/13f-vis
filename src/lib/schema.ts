@@ -27,9 +27,18 @@ export const HoldingSchema = z.object({
     .min(0, 'Share count cannot be negative'),
   value: z.number()
     .min(0, 'Market value cannot be negative'),
+  putCall: z.enum(['PUT', 'CALL']).nullable().optional(),
 })
 
 export type ParsedHolding = z.infer<typeof HoldingSchema>
+export type PutCall = NonNullable<ParsedHolding['putCall']>
+
+export function normalizePutCall(raw: string | null | undefined): PutCall | null {
+  const normalized = (raw ?? '').trim().toUpperCase()
+  if (normalized === 'PUT') return 'PUT'
+  if (normalized === 'CALL') return 'CALL'
+  return null
+}
 
 // ─── 13F Filing (metadata) ──────────────────────────────────────────────────
 

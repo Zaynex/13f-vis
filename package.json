@@ -11,6 +11,7 @@
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
+    "db:sync:institutions": "node --env-file=.env.local node_modules/.bin/tsx scripts/sync-13f-institutions.ts",
     "db:sync": "./supabase/scripts/incremental-sync.sh",
     "db:sync:full": "./supabase/scripts/incremental-sync.sh full",
     "pipeline:run": "node --env-file=.env.local node_modules/.bin/tsx src/lib/pipeline/run.ts",

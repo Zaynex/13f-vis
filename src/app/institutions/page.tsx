@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 
@@ -19,12 +19,16 @@ export default function InstitutionsPage() {
   const [requestStatus, setRequestStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle')
   const [requestError, setRequestError] = useState('')
   const [showRequestModal, setShowRequestModal] = useState(false)
+  const searchRequestId = useRef(0)
 
   const fetchInstitutions = useCallback(async (q: string) => {
+    const requestId = searchRequestId.current + 1
+    searchRequestId.current = requestId
     setLoading(true)
     const url = q ? `/api/institutions?q=${encodeURIComponent(q)}` : '/api/institutions'
     const res = await fetch(url)
     const data = await res.json()
+    if (searchRequestId.current !== requestId) return
     setInstitutions(data.institutions ?? [])
     setLoading(false)
   }, [])

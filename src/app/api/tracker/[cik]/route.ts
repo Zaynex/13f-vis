@@ -23,7 +23,7 @@ import { prisma } from '@/lib/prisma'
 import type { Decimal } from '@prisma/client/runtime/library'
 import { TrackerQuerySchema } from '@/lib/schema'
 import { calculateChangeBadge, ChangeBadge } from '@/lib/schema'
-import { dynamicFetch, getAvailableQuartersForCik } from '@/lib/pipeline/dynamic-fetch'
+import { dynamicFetchMany, getAvailableQuartersForCik } from '@/lib/pipeline/dynamic-fetch'
 import { NotFoundError } from '@/lib/errors'
 
 // Quarter format: YYYY-QN where N is 1-4
@@ -82,17 +82,12 @@ export async function GET(
       const missing = quarters.filter((q) => !filings.some((f) => f.quarter === q))
 
       if (missing.length > 0 && fetchIfMissing) {
-        // Dynamically fetch missing quarters in parallel
         const fetchErrors: Error[] = []
-        await Promise.all(
-          missing.map(async (q) => {
-            try {
-              await dynamicFetch(cik, q)
-            } catch (err) {
-              fetchErrors.push(err instanceof Error ? err : new Error(String(err)))
-            }
-          }),
-        )
+        try {
+          await dynamicFetchMany(cik, missing, { concurrency: 2 })
+        } catch (err) {
+          fetchErrors.push(err instanceof Error ? err : new Error(String(err)))
+        }
 
         // If any fetch failed with NotFoundError, return 404 with available quarters
         const notFoundErrors = fetchErrors.filter((e) => e instanceof NotFoundError)
@@ -187,17 +182,12 @@ export async function GET(
     let _fetched = false
 
     if (missing.length > 0 && fetchIfMissing) {
-      // Fetch missing quarters in parallel
       const fetchErrors: Error[] = []
-      await Promise.all(
-        missing.map(async (q) => {
-          try {
-            await dynamicFetch(cik, q)
-          } catch (err) {
-            fetchErrors.push(err instanceof Error ? err : new Error(String(err)))
-          }
-        }),
-      )
+      try {
+        await dynamicFetchMany(cik, missing, { concurrency: 2 })
+      } catch (err) {
+        fetchErrors.push(err instanceof Error ? err : new Error(String(err)))
+      }
 
       const notFoundErrors = fetchErrors.filter((e) => e instanceof NotFoundError)
       if (notFoundErrors.length > 0) {

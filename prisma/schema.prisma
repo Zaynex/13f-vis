@@ -87,6 +87,12 @@ model Holding {
   companyName           String
   rawShares             BigInt
   rawValue              Decimal    @db.Decimal(18, 2)
+  stockShares           BigInt     @default(0)
+  stockValue            Decimal    @default(0) @db.Decimal(18, 2)
+  putShares             BigInt     @default(0)
+  putValue              Decimal    @default(0) @db.Decimal(18, 2)
+  callShares            BigInt     @default(0)
+  callValue             Decimal    @default(0) @db.Decimal(18, 2)
   cumulativeSplitFactor Decimal    @default(1.0)
   adjustedShares        BigInt
   priorAdjustedShares  BigInt?

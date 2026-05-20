@@ -31,21 +31,38 @@ export default function HomePage() {
   const debouncedQuery = useDebounce(query, 250)
 
   useEffect(() => {
+    let cancelled = false
+
     if (!debouncedQuery) {
       // Load popular institutions on empty query
       fetch('/api/institutions')
         .then((r) => r.json())
-        .then((d) => setInstitutions(d.institutions ?? []))
+        .then((d) => {
+          if (!cancelled) setInstitutions(d.institutions ?? [])
+        })
         .catch(() => {})
-      return
+        .finally(() => {
+          if (!cancelled) setIsLoading(false)
+        })
+      return () => {
+        cancelled = true
+      }
     }
 
     setIsLoading(true)
     fetch(`/api/institutions?q=${encodeURIComponent(debouncedQuery)}`)
       .then((r) => r.json())
-      .then((d) => setInstitutions(d.institutions ?? []))
+      .then((d) => {
+        if (!cancelled) setInstitutions(d.institutions ?? [])
+      })
       .catch(() => {})
-      .finally(() => setIsLoading(false))
+      .finally(() => {
+        if (!cancelled) setIsLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
   }, [debouncedQuery])
 
   const handleSelect = useCallback(

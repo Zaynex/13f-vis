@@ -20,7 +20,7 @@
 
 import { parseString } from 'xml2js'
 import { promisify } from 'util'
-import { ParsedHolding } from '../schema'
+import { normalizePutCall, ParsedHolding } from '../schema'
 import { ParseError } from '../errors'
 
 const parseXml = promisify(parseString)
@@ -80,6 +80,7 @@ function parseInfoTableVariant(root: unknown): ParsedHolding[] {
     const nameRaw = extractText(r2.nameOfIssuer ?? r2['ns1:nameOfIssuer'] ?? r2['ns2:nameOfIssuer'])
     const cusipRaw = extractText(r2.cusip ?? r2['ns1:cusip'] ?? r2['ns2:cusip'])
     const valueRaw = extractText(r2.value ?? r2['ns1:value'] ?? r2['ns2:value'])
+    const putCall = normalizePutCall(extractText(r2.putCall ?? r2['ns1:putCall'] ?? r2['ns2:putCall']))
 
     if (!cusipRaw || cusipRaw.length < 7) continue
 
@@ -102,6 +103,7 @@ function parseInfoTableVariant(root: unknown): ParsedHolding[] {
         companyName: nameRaw || 'UNKNOWN',
         shares,
         value,
+        ...(putCall ? { putCall } : {}),
       })
     }
   }
@@ -134,6 +136,9 @@ function parseInfotableVariant(root: unknown): ParsedHolding[] {
     const cusipRaw = extractText(r.Cusip ?? r['ns1:Cusip'] ?? r['ns2:Cusip'])
     const companyName = extractText(r.Security ?? r['ns1:Security'] ?? r['ns2:Security'])
     const value = extractDecimal(r.Value ?? r['ns1:Value'] ?? r['ns2:Value'])
+    const putCall = normalizePutCall(extractText(
+      r.PutCall ?? r.PUTCALL ?? r.putCall ?? r['ns1:PutCall'] ?? r['ns2:PutCall'],
+    ))
 
     let shares = 0
     const sharesEl = r.Shares ?? r['ns1:Shares'] ?? r['ns2:Shares']
@@ -145,7 +150,13 @@ function parseInfotableVariant(root: unknown): ParsedHolding[] {
     const cusip = normalizeCusip(cusipRaw)
 
     if (shares > 0 || value > 0) {
-      holdings.push({ cusip, companyName: companyName || 'UNKNOWN', shares, value })
+      holdings.push({
+        cusip,
+        companyName: companyName || 'UNKNOWN',
+        shares,
+        value,
+        ...(putCall ? { putCall } : {}),
+      })
     }
   }
 
