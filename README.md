@@ -16,6 +16,7 @@ cp .env.example .env.local
 npm run db:generate   # Generate Prisma client
 npm run db:push        # Push schema to database
 npm run db:seed        # Seed initial institution set
+npm run db:sync:institutions -- --quarters=4  # Sync recent 13F-HR filer directory
 
 # 4. Fetch 13F data
 npm run pipeline:run -- --cik 0001067983 --quarter 2025-Q4   # single quarter
@@ -48,8 +49,9 @@ React Frontend (holdings dashboard + quarter selector + comparison view + tracke
 ## Key Design Decisions
 
 - **Dynamic query mode**: API endpoints auto-fetch missing quarters from SEC EDGAR on demand — no manual pipeline runs needed for new quarters. Concurrent requests for the same missing quarter share one pipeline run via a Promise deduplication cache, preventing thundering herd.
+- **SEC institution directory sync**: fuzzy search reads the local institution directory, which can be populated from SEC EDGAR quarterly `form.idx` files via `npm run db:sync:institutions`; this sync only stores CIK/name and does not fetch holdings until a user opens an institution or changes quarters.
 - **CUSIP as primary join key**: Company names vary across filers. CUSIP is authoritative.
-- **Split-adjusted shares**: 13F reports raw shares; Polygon.io (primary) + Yahoo Finance (fallback) stock split data is used to compute split-adjusted counts for accurate QoQ comparison.
+- **Split-adjusted shares**: 13F reports raw shares; Yahoo Finance CUSIP lookup is used first to compute split-adjusted counts for accurate QoQ comparison. Polygon.io can be enabled as a fallback, but is off by default because its free tier is slow for user-triggered imports.
 - **Multi-format parser**: EDGAR filings arrive in XML (~40%), HTML (~50%), and text (~10%). The parser handles all three via chain of responsibility.
 - **Zod at every external boundary**: All SEC and Yahoo Finance data is validated before touching the DB.
 

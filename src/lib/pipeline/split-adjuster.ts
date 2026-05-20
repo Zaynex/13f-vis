@@ -5,8 +5,10 @@
 // for stock splits using the cumulative split factor.
 //
 // Data sources (in priority order):
-// 1. Polygon.io splits API — requires ticker (CUSIP→ticker resolved via Yahoo Finance quote)
-// 2. Yahoo Finance chart API — accepts CUSIP directly, no auth needed
+// 1. Yahoo Finance chart API — accepts CUSIP directly, no auth needed
+// 2. Optional Polygon.io fallback — requires ENABLE_POLYGON_SPLIT_FALLBACK=true
+//    and a POLYGON_API_KEY. Polygon free tier is heavily rate limited, so it is
+//    kept opt-in for user-triggered on-demand imports.
 // 3. Fallback — unadjusted shares (no split adjustment)
 //
 // Yahoo Finance chart API:
@@ -18,6 +20,7 @@
 import { StockSplitSchema } from '../schema'
 
 const YAHOO_BASE = process.env.YAHOO_FINANCE_BASE_URL ?? 'https://query1.finance.yahoo.com'
+const YAHOO_TIMEOUT_MS = Number(process.env.YAHOO_SPLIT_TIMEOUT_MS ?? 1_500)
 
 interface YahooSplitEvent {
   date: number // Unix timestamp
@@ -61,7 +64,10 @@ const splitCache = new Map<string, Map<string, number>>()
 // Cached CUSIP → ticker mapping (needed for Polygon.io which uses tickers)
 const cusipToTickerCache = new Map<string, string>()
 
-const POLYGON_BASE = process.env.POLYGON_API_KEY
+const POLYGON_ENABLED =
+  process.env.ENABLE_POLYGON_SPLIT_FALLBACK === 'true' && Boolean(process.env.POLYGON_API_KEY)
+
+const POLYGON_BASE = POLYGON_ENABLED
   ? 'https://api.polygon.io'
   : ''
 
@@ -155,8 +161,8 @@ export async function getSplitAdjustedShares(
  * Returns a Map of date string → cumulative split factor up to that date.
  *
  * Tries in order:
- * 1. Polygon.io splits API (requires ticker, fetched via Yahoo Finance quote)
- * 2. Yahoo Finance chart API (CUSIP as symbol) — no auth needed
+ * 1. Yahoo Finance chart API (CUSIP as symbol) — no auth needed
+ * 2. Optional Polygon.io splits API (requires ticker, fetched via Yahoo Finance quote)
  * 3. Empty map (no split data available)
  */
 async function fetchSplits(cusip: string, beforeDate: Date): Promise<Map<string, number>> {
@@ -168,7 +174,19 @@ async function fetchSplits(cusip: string, beforeDate: Date): Promise<Map<string,
     return filtered
   }
 
-  // ── 1. Try Polygon.io (requires ticker — resolve CUSIP→ticker via Yahoo Finance quote) ──
+  // ── 1. Try Yahoo Finance chart API (accepts CUSIP directly) ──
+  try {
+    const yahooSplits = await fetchYahooSplits(cusip, beforeDate)
+    if (yahooSplits.size > 0) {
+      splitCache.set(cusip, yahooSplits)
+      return new Map([...yahooSplits].filter(([dateStr]) => new Date(dateStr) <= beforeDate))
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.warn(`[splitAdjuster] Yahoo Finance failed for CUSIP ${cusip}: ${msg}`)
+  }
+
+  // ── 2. Optional Polygon.io fallback (requires ticker resolution + rate limit) ──
   if (POLYGON_BASE) {
     try {
       const ticker = await resolveCusipToTicker(cusip)
@@ -185,59 +203,51 @@ async function fetchSplits(cusip: string, beforeDate: Date): Promise<Map<string,
     }
   }
 
-  // ── 2. Try Yahoo Finance chart API (accepts CUSIP directly) ──
-  try {
-    const url =
-      `${YAHOO_BASE}/v8/finance/chart/${cusip}` +
-      `?interval=div%2Fsplit` +
-      `&period1=0` +
-      `&period2=${Math.floor(beforeDate.getTime() / 1000)}`
-
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-        'Referer': 'https://finance.yahoo.com/',
-      },
-      signal: AbortSignal.timeout(10_000),
-    })
-
-    if (response.ok) {
-      const data: YahooChartResponse = await response.json()
-      const result = data.chart?.result?.[0]
-
-      if (result?.events?.splits) {
-        const splitsMap = new Map<string, number>()
-        const events = result.events.splits
-
-        for (const [dateStr, event] of Object.entries(events)) {
-          const splitRatio = `${event.numerator}:${event.denominator}`
-          const parsed = StockSplitSchema.safeParse({
-            cusip,
-            splitDate: new Date(parseInt(dateStr) * 1000).toISOString().split('T')[0],
-            splitRatio,
-          })
-
-          if (!parsed.success) continue
-
-          const factor = event.numerator / event.denominator
-          splitsMap.set(parsed.data.splitDate, factor)
-        }
-
-        if (splitsMap.size > 0) {
-          splitCache.set(cusip, splitsMap)
-          return new Map([...splitsMap].filter(([dateStr]) => new Date(dateStr) <= beforeDate))
-        }
-      }
-    }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.warn(`[splitAdjuster] Yahoo Finance failed for CUSIP ${cusip}: ${msg}`)
-  }
-
   // ── 3. No split data available ──
   splitCache.set(cusip, new Map())
   return new Map()
+}
+
+async function fetchYahooSplits(cusip: string, beforeDate: Date): Promise<Map<string, number>> {
+  const url =
+    `${YAHOO_BASE}/v8/finance/chart/${cusip}` +
+    `?interval=div%2Fsplit` +
+    `&period1=0` +
+    `&period2=${Math.floor(beforeDate.getTime() / 1000)}`
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+      'Referer': 'https://finance.yahoo.com/',
+    },
+    signal: AbortSignal.timeout(YAHOO_TIMEOUT_MS),
+  })
+
+  if (!response.ok) return new Map()
+
+  const data: YahooChartResponse = await response.json()
+  const result = data.chart?.result?.[0]
+  if (!result?.events?.splits) return new Map()
+
+  const splitsMap = new Map<string, number>()
+  const events = result.events.splits
+
+  for (const [dateStr, event] of Object.entries(events)) {
+    const splitRatio = `${event.numerator}:${event.denominator}`
+    const parsed = StockSplitSchema.safeParse({
+      cusip,
+      splitDate: new Date(parseInt(dateStr) * 1000).toISOString().split('T')[0],
+      splitRatio,
+    })
+
+    if (!parsed.success) continue
+
+    const factor = event.numerator / event.denominator
+    splitsMap.set(parsed.data.splitDate, factor)
+  }
+
+  return splitsMap
 }
 
 /**

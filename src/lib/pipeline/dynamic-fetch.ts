@@ -17,10 +17,21 @@ import { getAvailableQuarters } from './index'
 // Deduplication cache: key = "CIK:quarter", value = pending Promise
 // Cleared on success or failure via .finally()
 const pendingFetches = new Map<string, Promise<unknown>>()
+const pendingLatestFetches = new Map<string, Promise<DynamicFetchLatestResult>>()
 
 export interface DynamicFetchOptions {
   /** Skip split adjustment (faster but unadjusted shares) */
   skipSplitAdjustment?: boolean
+}
+
+export interface DynamicFetchLatestResult {
+  quarter: string
+  fetched: boolean
+}
+
+export interface DynamicFetchManyOptions extends DynamicFetchOptions {
+  /** Maximum number of distinct quarter pipelines to start at once */
+  concurrency?: number
 }
 
 /**
@@ -52,6 +63,65 @@ export async function dynamicFetch(
 
   pendingFetches.set(key, promise as Promise<unknown>)
   await promise
+}
+
+/**
+ * Fetch the newest 13F-HR quarter currently available on SEC EDGAR.
+ * Concurrent calls for the same CIK share both the submissions lookup and
+ * the underlying CIK+quarter pipeline.
+ */
+export async function dynamicFetchLatest(
+  cik: string,
+  options: DynamicFetchOptions = {},
+): Promise<DynamicFetchLatestResult> {
+  const key = cik
+
+  if (pendingLatestFetches.has(key)) {
+    return pendingLatestFetches.get(key)!
+  }
+
+  const promise = (async () => {
+    const quarters = await getAvailableQuarters(cik)
+    const latestQuarter = quarters[0]
+
+    if (!latestQuarter) {
+      throw new Error(`No 13F-HR quarters available for CIK ${cik}`)
+    }
+
+    await dynamicFetch(cik, latestQuarter, options)
+    return { quarter: latestQuarter, fetched: true }
+  })().finally(() => {
+    pendingLatestFetches.delete(key)
+  })
+
+  pendingLatestFetches.set(key, promise)
+  return promise
+}
+
+/**
+ * Fetch several missing quarters with bounded concurrency.
+ * Each item still goes through dynamicFetch(), so duplicate quarters and
+ * concurrent requests from other API calls reuse the same CIK+quarter promise.
+ */
+export async function dynamicFetchMany(
+  cik: string,
+  quarters: string[],
+  options: DynamicFetchManyOptions = {},
+): Promise<void> {
+  const uniqueQuarters = [...new Set(quarters)]
+  const concurrency = Math.max(1, options.concurrency ?? 2)
+  let nextIndex = 0
+
+  async function worker() {
+    while (nextIndex < uniqueQuarters.length) {
+      const quarter = uniqueQuarters[nextIndex]
+      nextIndex += 1
+      await dynamicFetch(cik, quarter, options)
+    }
+  }
+
+  const workerCount = Math.min(concurrency, uniqueQuarters.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
 }
 
 /**

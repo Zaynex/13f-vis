@@ -26,6 +26,13 @@ interface Holding {
   companyName: string
   adjustedShares: number
   rawValue: number
+  stockShares?: number
+  stockValue?: number
+  putShares?: number
+  putValue?: number
+  callShares?: number
+  callValue?: number
+  optionSummary?: string
   weightPercent?: number | null
   changeType: ChangeType | 'UNCHANGED'
   changePercent: number | null
@@ -201,6 +208,11 @@ export default function InstitutionPage() {
         setData(json)
         if (json.filing) {
           setSelectedQuarter(json.filing.quarter)
+          setQuarters((prev) =>
+            prev.includes(json.filing!.quarter)
+              ? prev
+              : [...prev, json.filing!.quarter].sort().reverse(),
+          )
         }
       } catch (err) {
         console.error(err)
